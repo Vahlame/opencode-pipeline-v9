@@ -33,6 +33,7 @@ const DEFAULT_AGENTS: readonly AgentSummary[] = [
   { id: 'frontend', name: 'Frontend Specialist', mode: 'primary' },
   { id: 'backend', name: 'Backend Specialist', mode: 'primary' },
   { id: 'database', name: 'Database Specialist', mode: 'primary' },
+  { id: 'matematico', name: 'Mathematician', mode: 'primary' },
   { id: 'testing', name: 'Testing Judge', mode: 'primary' },
   { id: 'debugger', name: 'Debug Judge', mode: 'primary' },
   { id: 'architecture', name: 'Architecture Judge', mode: 'primary' },

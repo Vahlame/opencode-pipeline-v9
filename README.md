@@ -16,6 +16,8 @@ operacion observable.
   feedback global y entrega final con aprobacion humana.
 - Fase 6: `RecoveryManager`, idempotencia, control de recursos, observabilidad CLI,
   mantenimiento de worktrees y auditoria operativa.
+- Agente `matematico`: investigacion de papers, formalizacion, ecuaciones,
+  validacion numerica y optimizacion para hardware.
 - Modelo actual: `opencode-go/deepseek-v4.1-flash`.
 - Runtime interactivo: `HttpOpenCodeAdapter` contra el servidor OpenCode V2 de la app.
 - Runtime CI/headless: `SdkOpenCodeAdapter`; pruebas: `MockOpenCodeAdapter`.
@@ -153,6 +155,7 @@ local, no un servicio publico.
 | `frontend`     | Especialista frontend                             |
 | `backend`      | Especialista backend                              |
 | `database`     | Especialista de persistencia                      |
+| `matematico`   | Investigacion matematica, papers y optimizacion   |
 | `testing`      | Juez obligatorio de pruebas                       |
 | `debugger`     | Juez obligatorio de depuracion                    |
 | `architecture` | Juez obligatorio de arquitectura                  |
@@ -188,7 +191,7 @@ y reglas ordenadas. No se usan campos V1 como `permission`, `bash` o `maxSteps`.
 ## Resultado de la Fase 6
 
 ```text
-npm run check       -> 93 pruebas pasan, 2 omitidas
+npm run check       -> 94 pruebas pasan, 2 omitidas
 npm run build       -> pasa
 npm run db:migrate  -> esquema 5
 npm run test:real   -> 1 prueba real pasa

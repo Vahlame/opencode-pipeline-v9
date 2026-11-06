@@ -25,7 +25,10 @@ export class SessionManager {
     readonly worktree: WorktreeRecord
     readonly model?: ModelReference
   }): Promise<{ record: SessionRecord; view: SessionView }> {
-    const permissions = this.permissionsFor(input.contract.allowedPaths)
+    const allowWebResearch =
+      input.agent.opencodeAgentId === 'matematico' ||
+      input.agent.capabilities.includes('web-research')
+    const permissions = this.permissionsFor(input.contract.allowedPaths, allowWebResearch)
     const view = await this.adapter.createSession({
       directory: input.worktree.path,
       agent: input.agent.opencodeAgentId,
@@ -212,7 +215,10 @@ export class SessionManager {
     return { delivered: messages.length, deferred: 0 }
   }
 
-  private permissionsFor(allowedPaths: readonly string[]): OpenCodePermissionRule[] {
+  private permissionsFor(
+    allowedPaths: readonly string[],
+    allowWebResearch = false,
+  ): OpenCodePermissionRule[] {
     const rules: OpenCodePermissionRule[] = [
       { action: 'read', resource: '**', effect: 'allow' },
       { action: 'read', resource: '**/.env*', effect: 'deny' },
@@ -232,8 +238,16 @@ export class SessionManager {
       { action: 'shell', resource: '*', effect: 'deny' },
       { action: 'external_directory', resource: '*', effect: 'deny' },
       { action: 'subagent', resource: '*', effect: 'deny' },
-      { action: 'webfetch', resource: '*', effect: 'deny' },
-      { action: 'websearch', resource: '*', effect: 'deny' },
+      {
+        action: 'webfetch',
+        resource: '*',
+        effect: allowWebResearch ? 'allow' : 'deny',
+      },
+      {
+        action: 'websearch',
+        resource: '*',
+        effect: allowWebResearch ? 'allow' : 'deny',
+      },
     ]
     return rules
   }

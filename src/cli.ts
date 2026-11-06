@@ -23,6 +23,7 @@ const EXPECTED_AGENTS = [
   'frontend',
   'backend',
   'database',
+  'matematico',
   'testing',
   'debugger',
   'architecture',

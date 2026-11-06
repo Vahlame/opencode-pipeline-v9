@@ -51,6 +51,9 @@ No ejecutes `npm run test:real` en CI ni sin intencion explicita: consume tokens
 - `src/recovery/`: `RecoveryManager`, reconciliacion y mantenimiento de worktrees.
 - `src/resources/`: `ResourceGovernor`, estimacion de tokens/coste y limites.
 - `src/operations/`: diario idempotente de operaciones con leases.
+- `.opencode/agents/matematico.md`: investigacion web, papers, ecuaciones,
+  validacion numerica y optimizacion para hardware; escribe solo en
+  `modules/math/**` y `research/math/**`.
 - `.worktrees/`: worktrees de tareas, integraciones y snapshots, ignorados por Git.
 - `.opencode/agents/`: perfiles V2 en Markdown.
 - `.opencode/skills/`: instrucciones compartidas.

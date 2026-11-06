@@ -216,6 +216,38 @@ La entrega legible esta en `docs/entrega-final.md`. No existe una notificacion
 pop-up: el aviso al padre es un mensaje persistido y la entrega se consulta con
 `status`, `delivery:show` o `delivery:export`.
 
+### Agente matematico
+
+Se agrego el perfil `matematico` como especialista dedicado:
+
+- formaliza problemas y restricciones;
+- busca papers, surveys y documentacion tecnica con `webfetch`/`websearch`;
+- compara enfoques y sintetiza teorias;
+- deriva ecuaciones y valida dimensiones/casos limite;
+- estima complejidad, memoria y encaje en CPU/GPU;
+- escribe solo en `modules/math/**` y `research/math/**`;
+- no tiene shell, subagentes ni acceso a secretos.
+
+El permiso web solo se habilita para este agente. Los demas especialistas,
+jueces y feedback mantienen `webfetch`/`websearch` denegados. La skill
+`math-research` documenta la metodologia y exige citas verificables, separacion
+entre teorema/aproximacion/conjetura y validacion numerica.
+
+Prueba real ejecutada:
+
+```text
+agente: matematico
+modelo: opencode-go/deepseek-v4.1-flash
+sesion: ses_e4dc8f2fdffe1B4tPLLu4vKst4
+prompt: buscar un paper reciente sobre GEMM en GPU y devolver JSON verificable
+resultado: KAMI: Communication-Avoiding General Matrix Multiplication within a Single GPU
+DOI: https://doi.org/10.1145/3712285.3759895
+verificacion: websearch + webfetch del DOI; no se citaron speedups no reproducidos
+```
+
+El agente no invento la fuente, verifico el DOI y separo la evidencia de las
+cifras no reproducidas.
+
 ## Manual de uso
 
 ### Instalacion
@@ -317,12 +349,12 @@ npx tsx src/cli.ts maintenance:cleanup --project <project-id> --keep-days 7 --to
 ## Verificacion final
 
 ```text
-npm run check       -> 93 pruebas pasan, 2 omitidas
+npm run check       -> 94 pruebas pasan, 2 omitidas
 npm run build       -> pasa
 npm run db:migrate  -> esquema 5
 npm run test:real   -> 1 prueba real pasa
 npm run test:sdk    -> 1 prueba SDK pasa
-npm run doctor      -> fase 6, OpenCode V2.2.5, 11 perfiles
+npm run doctor      -> fase 6, OpenCode V2.2.5, 12 perfiles
 ```
 
 ## Limitaciones conocidas

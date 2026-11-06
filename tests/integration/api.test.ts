@@ -98,7 +98,7 @@ describe('internal API', () => {
 
     const state = await request(`${base}/api/state?projectId=${project.id}`, humanToken)
     expect(state.status).toBe(200)
-    expect((state.body as { agents: unknown[] }).agents).toHaveLength(11)
+    expect((state.body as { agents: unknown[] }).agents).toHaveLength(12)
 
     const integrations = await request(
       `${base}/api/integrations?projectId=${project.id}`,

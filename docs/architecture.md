@@ -29,7 +29,7 @@ El SDK usa un directorio temporal y variables `XDG_*`/`OPENCODE_DB` aisladas por
 
 ## Por qué mock
 
-El mock implementa exactamente el mismo contrato, incluye los 11 perfiles y permite verificar creación de sesión, prompt, espera, transcripción y borrado sin consumir tokens.
+El mock implementa exactamente el mismo contrato, incluye los 12 perfiles y permite verificar creación de sesión, prompt, espera, transcripción y borrado sin consumir tokens.
 
 ## Añadido en la Fase 2
 

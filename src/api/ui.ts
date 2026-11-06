@@ -184,7 +184,7 @@ export function renderUi(): string {
           <div class="eyebrow">Recursos</div>
           <h3>Presupuesto estimado</h3>
           <div class="stat" id="token-count">0</div>
-          <div class="muted">tokens estimados</div>
+          <div class="muted">tokens registrados</div>
           <div class="list">
             <div class="row"><div><strong>Coste</strong><small id="cost-value">0 USD</small></div></div>
             <div class="row"><div><strong>Tiempo</strong><small id="time-value">0 min</small></div></div>
@@ -194,6 +194,26 @@ export function renderUi(): string {
           <div class="eyebrow">Tareas y dependencias</div>
           <h3>Ejecucion</h3>
           <table><thead><tr><th>Estado</th><th>Tarea</th><th>Modulo</th><th>Dependencias</th></tr></thead><tbody id="tasks"></tbody></table>
+        </div>
+      </section>
+
+      <section id="usage" class="grid" style="margin-top:16px">
+        <div class="card span-12">
+          <div class="eyebrow">Contabilidad</div>
+          <h3>Tokens por subagente, tarea y proposito</h3>
+          <div class="muted">Datos exactos reportados por OpenCode; si falta usage se muestra la estimacion.</div>
+          <div class="controls" style="margin-top:12px">
+            <select id="usage-by" aria-label="Agrupar uso" onchange="renderUsage()">
+              <option value="agent">Por subagente</option>
+              <option value="task">Por tarea</option>
+              <option value="purpose">Por proposito</option>
+            </select>
+            <span class="muted" id="usage-total"></span>
+          </div>
+          <table>
+            <thead><tr><th>Clave</th><th>Fuente</th><th>Entrada</th><th>Salida</th><th>Coste</th><th>Registros</th></tr></thead>
+            <tbody id="usage-rows"><tr><td colspan="6" class="muted">Sin datos de uso.</td></tr></tbody>
+          </table>
         </div>
       </section>
 
@@ -290,15 +310,16 @@ export function renderUi(): string {
       if (!state.projectId || !state.token) return toast('Project ID y token son obligatorios', true);
       $('load-state').textContent = 'Cargando...';
       try {
-        const [stateData, plans, feedback, deliveries, integrations, recovery] = await Promise.all([
+        const [stateData, plans, feedback, deliveries, integrations, recovery, usage] = await Promise.all([
           api('/api/state?projectId=' + encodeURIComponent(state.projectId)),
           api('/api/plans?projectId=' + encodeURIComponent(state.projectId)),
           api('/api/feedback?projectId=' + encodeURIComponent(state.projectId)),
           api('/api/deliveries?projectId=' + encodeURIComponent(state.projectId)),
           api('/api/integrations?projectId=' + encodeURIComponent(state.projectId)),
           api('/api/recovery/history?projectId=' + encodeURIComponent(state.projectId)),
+          api('/api/usage?projectId=' + encodeURIComponent(state.projectId)),
         ]);
-        state.data = { stateData, plans, feedback, deliveries, integrations, recovery };
+        state.data = { stateData, plans, feedback, deliveries, integrations, recovery, usage };
         render();
         $('load-state').textContent = 'Actualizado ' + new Date().toLocaleTimeString();
         toast('Estado actualizado');
@@ -350,6 +371,28 @@ export function renderUi(): string {
         (d.status === 'READY' ? '<button class="btn" onclick="finalizeDelivery(\\'' + d.id + '\\')">Finalizar</button>' : '') +
         '</div></div>'
       ).join('') : '<div class="empty">Aun no hay entrega final.</div>';
+      renderUsage();
+    }
+    function renderUsage() {
+      const by = $('usage-by').value;
+      const groups = (state.data && state.data.usage && state.data.usage.groups) || [];
+      const group = groups.find((candidate) => candidate.by === by);
+      const rows = group ? group.rows : [];
+      const totals = rows.reduce((acc, row) => {
+        acc.input += row.inputTokens;
+        acc.output += row.outputTokens;
+        acc.cost += row.costUsd;
+        return acc;
+      }, { input: 0, output: 0, cost: 0 });
+      $('usage-total').textContent = rows.length
+        ? 'in ' + totals.input + ' · out ' + totals.output + ' · ' + totals.cost + ' USD'
+        : '';
+      $('usage-rows').innerHTML = rows.length ? rows.map(row =>
+        '<tr><td><strong>' + esc(row.label) + '</strong><div class="mono">' + esc(row.key) + '</div></td>' +
+        '<td>' + badge(row.source, row.source === 'provider' ? 'ok' : 'warn') + '</td>' +
+        '<td class="mono">' + row.inputTokens + '</td><td class="mono">' + row.outputTokens + '</td>' +
+        '<td class="mono">' + row.costUsd + ' USD</td><td>' + row.entries + '</td></tr>'
+      ).join('') : '<tr><td colspan="6" class="muted">Sin datos de uso.</td></tr>';
     }
     async function approvePlan(planId, hash) {
       try {

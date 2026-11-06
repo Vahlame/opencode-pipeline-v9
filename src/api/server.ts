@@ -213,6 +213,30 @@ export async function startApiServer(
         sendJson(response, 200, context.service.getState(principal, requireProject(projectId)))
         return
       }
+      if (method === 'GET' && path === '/api/usage') {
+        const id = requireProject(projectId)
+        context.authz.require(principal, 'resource.read', { type: 'project', id })
+        const labelFor = (by: 'agent' | 'task' | 'purpose', key: string): string => {
+          if (by === 'agent') {
+            const agent = context.store.getAgent(key as never)
+            return agent ? `${agent.opencodeAgentId} (${agent.name})` : key
+          }
+          if (by === 'task') {
+            const task = context.store.getTask(key as never)
+            return task ? `${task.title} [${task.state}]` : key
+          }
+          return key
+        }
+        const groups = (['agent', 'task', 'purpose'] as const).map((by) => ({
+          by,
+          rows: context.store.usageBreakdown(id, by).map((row) => ({
+            ...row,
+            label: labelFor(by, row.key),
+          })),
+        }))
+        sendJson(response, 200, { groups })
+        return
+      }
       if (method === 'GET' && path === '/api/plans') {
         const id = requireProject(projectId)
         sendJson(response, 200, context.service.listPlans(principal, id))

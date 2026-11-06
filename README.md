@@ -246,7 +246,7 @@ y reglas ordenadas. No se usan campos V1 como `permission`, `bash` o `maxSteps`.
 ## Resultado de la Fase 6
 
 ```text
-npm run check       -> 103 pruebas pasan, 2 omitidas
+npm run check       -> 104 pruebas pasan, 2 omitidas
 npm run build       -> pasa
 npm run db:migrate  -> esquema 8
 npm run test:real   -> 1 prueba real pasa

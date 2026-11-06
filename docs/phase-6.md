@@ -430,7 +430,7 @@ npx tsx src/cli.ts maintenance:cleanup --project <project-id> --keep-days 7 --to
 ## Verificacion final
 
 ```text
-npm run check       -> 103 pruebas pasan, 2 omitidas
+npm run check       -> 104 pruebas pasan, 2 omitidas
 npm run build       -> pasa
 npm run db:migrate  -> esquema 8
 npm run test:real   -> 1 prueba real pasa

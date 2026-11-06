@@ -94,7 +94,7 @@ En esta maquina se probo un clon local limpio (sin `.env`, `.runtime` ni
 `node_modules`), se ejecuto `install-virgin.ps1` y despues `npm run check`:
 
 ```text
-31 archivos de prueba; 103 pruebas pasan, 2 omitidas
+31 archivos de prueba; 104 pruebas pasan, 2 omitidas
 ```
 
 Tambien se corrigio el problema de CRLF que hacia fallar `format:check` en un

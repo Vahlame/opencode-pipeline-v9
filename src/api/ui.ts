@@ -139,6 +139,7 @@ export function renderUi(): string {
             <div class="eyebrow">Conversacion</div>
             <h3 id="agent-title">Selecciona una sesion</h3>
             <div class="muted" id="agent-meta">Veras los mensajes del agente, sus tokens y el resultado de la tarea.</div>
+            <div class="row-actions" style="margin-top:8px"><button class="btn ghost small" type="button" onclick="copyAgentId()">Copiar ID de sesion</button></div>
             <div id="agent-transcript" class="agent-chat">
               <div class="empty"><strong>Sin conversacion abierta</strong>Elige una sesion de la izquierda para leerla.</div>
             </div>
@@ -148,7 +149,7 @@ export function renderUi(): string {
       </section>
       <section id="task-builder" class="section" style="display:none">
         <div class="section-head">
-          <div class="section-num">03</div>
+          <div class="section-num">04</div>
           <div>
             <h2>Nueva tarea</h2>
             <p>Una tarea es una unidad de trabajo con un especialista, una ruta permitida y una prueba de aceptacion. El scheduler la ejecuta en un worktree aislado.</p>
@@ -172,7 +173,7 @@ export function renderUi(): string {
 
       <section id="usage" class="grid section">
         <div class="section-head span-12">
-          <div class="section-num">04</div>
+          <div class="section-num">OBS</div>
           <div>
             <h2>Contabilidad de tokens</h2>
             <p>OpenCode reporta tokens y coste por mensaje. Aqui ves el gasto exacto por subagente, tarea o proposito; si falta usage se muestra la estimacion.</p>
@@ -196,7 +197,7 @@ export function renderUi(): string {
 
       <section id="approval" class="grid section">
         <div class="section-head span-12">
-          <div class="section-num">05</div>
+          <div class="section-num">03</div>
           <div>
             <h2>Plan y aprobacion</h2>
             <p>Aprobar un plan es una decision humana. Hasta que pulses Aprobar, el proyecto no puede ejecutar tareas.</p>
@@ -216,7 +217,7 @@ export function renderUi(): string {
 
       <section id="feedback" class="grid section">
         <div class="section-head span-12">
-          <div class="section-num">06</div>
+          <div class="section-num">05</div>
           <div>
             <h2>Revision y entrega</h2>
             <p>El jurado independiente y el feedback global deciden si el trabajo se puede integrar. La entrega final exige PASS y aprobacion humana.</p>
@@ -236,7 +237,7 @@ export function renderUi(): string {
 
       <section id="recovery" class="grid section">
         <div class="section-head span-12">
-          <div class="section-num">07</div>
+          <div class="section-num">SYS</div>
           <div>
             <h2>Recuperacion y mensajes</h2>
             <p>Diagnostica leases, sesiones, tareas y worktrees interrumpidos. Aplicar recuperacion solo ejecuta acciones seguras y queda auditado.</p>
@@ -263,7 +264,7 @@ export function renderUi(): string {
 
       <section id="delivery" class="grid section">
         <div class="section-head span-12">
-          <div class="section-num">08</div>
+          <div class="section-num">06</div>
           <div>
             <h2>Entrega final</h2>
             <p>La salida solo se prepara con feedback PASS. Finalizar una entrega requiere aprobacion humana y deja firma y evidencia.</p>
@@ -588,6 +589,13 @@ export function renderUi(): string {
         renderAgents(sessions);
         toast('Agentes actualizados');
       } catch (error) { toast(error.message, true); }
+    }
+    async function copyAgentId() {
+      if (!state.selectedSession) return toast('Selecciona una sesion primero', true);
+      try {
+        await navigator.clipboard.writeText(state.selectedSession);
+        toast('ID copiado: ' + state.selectedSession);
+      } catch { toast('No se pudo copiar el ID', true); }
     }
     async function createProject() {
       const name = $('new-project-name').value.trim();

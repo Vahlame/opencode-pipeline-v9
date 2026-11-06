@@ -54,7 +54,7 @@ async function withRuntime(
   const adapter = await createOpenCodeAdapter(context.config)
   try {
     const worktrees = new WorktreeManager(context.config.projectDir, context.config.worktreeRoot)
-    const sessions = new SessionManager(context.store, adapter)
+    const sessions = new SessionManager(context.store, adapter, context.resources)
     const judgeExecutor = new OpenCodeJudgeExecutor(context.store, sessions, context.config)
     const jury = new JuryService(
       context.store,

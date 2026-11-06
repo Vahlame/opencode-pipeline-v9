@@ -7,6 +7,8 @@ import type { SqliteStore } from '../persistence/store.js'
 import { StoreConflictError } from '../persistence/store.js'
 import type { TaskClaim, TaskExecutionResult } from './execution-types.js'
 import type { TaskExecutor } from './task-executor.js'
+import type { ResourceGovernor } from '../resources/governor.js'
+import { ResourceLimitError } from '../resources/governor.js'
 
 export interface SchedulerOptions {
   readonly maxParallel: number
@@ -20,6 +22,7 @@ export class Scheduler {
     private readonly authz: AuthorizationService,
     private readonly executor: TaskExecutor,
     private readonly options: SchedulerOptions,
+    private readonly resources?: ResourceGovernor,
   ) {}
 
   refreshReadyTasks(projectId: ProjectId, actorId: string): number {
@@ -65,6 +68,12 @@ export class Scheduler {
     const project = this.store.getProject(projectId)
     if (!project || project.status !== 'RUNNING') return []
     if (!this.store.listPlans(projectId).some((plan) => plan.status === 'APPROVED')) return []
+    try {
+      this.resources?.assertAvailable(projectId)
+    } catch (error) {
+      if (error instanceof ResourceLimitError) return []
+      throw error
+    }
 
     this.recoverExpiredLeases(principal, projectId)
     this.refreshReadyTasks(projectId, principal.subjectId)

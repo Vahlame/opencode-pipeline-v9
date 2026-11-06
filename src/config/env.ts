@@ -64,6 +64,17 @@ const EnvSchema = z.object({
   ORCH_JURY_TIMEOUT_MS: z.coerce.number().int().min(10_000).max(3_600_000).default(180_000),
   ORCH_INTEGRATION_TIMEOUT_MS: z.coerce.number().int().min(10_000).max(3_600_000).default(300_000),
   ORCH_FEEDBACK_TIMEOUT_MS: z.coerce.number().int().min(10_000).max(3_600_000).default(300_000),
+  ORCH_MAX_AGENTS: z.coerce.number().int().min(1).max(32).default(2),
+  ORCH_MAX_INTEGRATION_ATTEMPTS: z.coerce.number().int().min(1).max(20).default(5),
+  ORCH_PROJECT_MAX_MINUTES: z.coerce.number().int().min(1).max(10_080).default(120),
+  ORCH_MAX_PROJECT_TOKENS: z.coerce.number().int().min(1).default(2_000_000),
+  ORCH_MAX_PROJECT_COST_USD: z.coerce.number().min(0).default(25),
+  ORCH_INPUT_COST_PER_MILLION: z.coerce.number().min(0).default(0.15),
+  ORCH_OUTPUT_COST_PER_MILLION: z.coerce.number().min(0).default(0.6),
+  ORCH_RECOVERY_STALE_MINUTES: z.coerce.number().int().min(1).max(10_080).default(10),
+  ORCH_RECOVERY_ON_START: booleanFlag.default(true),
+  ORCH_WORKTREE_RETENTION_DAYS: z.coerce.number().int().min(0).max(3650).default(7),
+  ORCH_OPERATION_LEASE_SECONDS: z.coerce.number().int().min(10).max(3600).default(300),
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
 })
 

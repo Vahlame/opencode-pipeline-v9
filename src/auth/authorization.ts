@@ -81,6 +81,11 @@ export type Action =
   | 'feedback.read'
   | 'delivery.read'
   | 'delivery.finalize'
+  | 'recovery.run'
+  | 'recovery.read'
+  | 'maintenance.cleanup'
+  | 'maintenance.read'
+  | 'resource.read'
 
 export type ResourceType =
   | 'project'
@@ -156,6 +161,9 @@ const READ_ACTIONS = new Set<Action>([
   'integration.read',
   'feedback.read',
   'delivery.read',
+  'recovery.read',
+  'maintenance.read',
+  'resource.read',
 ])
 
 const COORDINATOR_ACTIONS = new Set<Action>([
@@ -171,6 +179,7 @@ const COORDINATOR_ACTIONS = new Set<Action>([
   'checkpoint.write',
   'session.interrupt',
   'jury.run',
+  'recovery.run',
   'temporary_permission.grant',
 ])
 
@@ -192,6 +201,8 @@ const HUMAN_ACTIONS = new Set<Action>([
   'session.interrupt',
   'jury.run',
   'delivery.finalize',
+  'recovery.run',
+  'maintenance.cleanup',
   'temporary_permission.grant',
 ])
 
@@ -283,6 +294,7 @@ export class AuthorizationService {
     if (
       projectState &&
       !READ_ACTIONS.has(action) &&
+      action !== 'maintenance.cleanup' &&
       ['COMPLETED', 'FAILED', 'CANCELLED'].includes(projectState.status)
     ) {
       return this.record(

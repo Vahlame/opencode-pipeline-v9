@@ -238,8 +238,9 @@ npm run test:sdk   -> 1 prueba SDK pasa
   como criterio.
 - El reloj del manifiesto es determinista y se ancla despues de la aprobacion mas
   reciente para permitir reproducibilidad sin cronologias imposibles.
-- Los worktrees y snapshots se conservan como evidencia. No hay limpieza
-  automatica.
+- Los worktrees y snapshots se conservaron durante la Fase 5. En la Fase 6 se
+  aplico `maintenance:cleanup` sobre snapshots limpios; los commits, ramas y la
+  evidencia SQLite se conservaron. Ver `docs/phase-6.md`.
 - Permanecen tareas historicas del proyecto: la tarea original del frontend en
   `REWORK_REQUIRED` (sustituida por su rework integrado) y la tarea dependiente
   en `PENDING`.

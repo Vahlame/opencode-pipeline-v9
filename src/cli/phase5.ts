@@ -82,6 +82,8 @@ function integrationManager(
       baseRef: context.config.ORCH_GIT_BASE_REF,
       testsTimeoutMs: context.config.ORCH_INTEGRATION_TIMEOUT_MS,
       worktreeRoot: context.config.worktreeRoot,
+      maxAttempts: context.config.ORCH_MAX_INTEGRATION_ATTEMPTS,
+      resources: context.resources,
     },
     adapterAuthor,
   )
@@ -96,10 +98,10 @@ export function registerPhase5Commands(program: Command): void {
       const context = createAppContext()
       try {
         const request = readRequest(getString(options, 'input'))
-        if (options['agent-adapter'] === true) {
+        if (options.agentAdapter === true) {
           const adapter = await createOpenCodeAdapter(context.config)
           try {
-            const sessions = new SessionManager(context.store, adapter)
+            const sessions = new SessionManager(context.store, adapter, context.resources)
             const author = new OpenCodeAdapterAuthor(context.store, sessions, context.config)
             const result = await integrationManager(context, author).run(
               principal(context, options),
@@ -188,7 +190,7 @@ export function registerPhase5Commands(program: Command): void {
           context.config.projectDir,
           context.config.worktreeRoot,
         )
-        const sessions = new SessionManager(context.store, adapter)
+        const sessions = new SessionManager(context.store, adapter, context.resources)
         const executor = new OpenCodeFeedbackExecutor(context.store, sessions, context.config)
         const service = new FeedbackService(context.store, context.authz, worktrees, executor)
         const result = await service.run(principal(context, options), manifestId)

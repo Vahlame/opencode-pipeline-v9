@@ -2,13 +2,15 @@
 
 ## Contexto
 
-Este repositorio implementa las fases 1, 2, 3, 4 y 5 de **OpenCode Multiagent
+Este repositorio implementa las fases 1, 2, 3, 4, 5 y 6 de **OpenCode Multiagent
 Orchestrator V9** sobre OpenCode V2. La Fase 1 aporta la base y la conexion real;
 la Fase 2 aporta SQLite, autorizacion, mensajeria, eventos durables y outbox; la
 Fase 3 aporta scheduler DAG, worktrees Git, sesiones reales, ejecucion paralela y
 leases; la Fase 4 aporta jurado independiente, consolidacion determinista, rework
 y registro de modulos aprobados; la Fase 5 aporta integracion hibrida,
-adaptadores, manifiesto reproducible, feedback global y entrega final.
+adaptadores, manifiesto reproducible, feedback global y entrega final; la Fase 6
+aporta recuperacion tras reinicios, idempotencia, control de recursos,
+observabilidad CLI y auditoria operativa.
 
 ## Comandos de verificacion
 
@@ -46,6 +48,9 @@ No ejecutes `npm run test:real` en CI ni sin intencion explicita: consume tokens
 - `src/jury/`: jueces, consolidacion determinista y rework.
 - `src/integration/`: `IntegrationManager`, workspace Git, manifiesto,
   `FeedbackService`, `DeliveryService` y agentes de feedback.
+- `src/recovery/`: `RecoveryManager`, reconciliacion y mantenimiento de worktrees.
+- `src/resources/`: `ResourceGovernor`, estimacion de tokens/coste y limites.
+- `src/operations/`: diario idempotente de operaciones con leases.
 - `.worktrees/`: worktrees de tareas, integraciones y snapshots, ignorados por Git.
 - `.opencode/agents/`: perfiles V2 en Markdown.
 - `.opencode/skills/`: instrucciones compartidas.
@@ -99,6 +104,25 @@ del sistema debe depender de `OpenCodeAdapter`.
   evidencia.
 - `ORCH_INTEGRATION_TIMEOUT_MS` y `ORCH_FEEDBACK_TIMEOUT_MS` limitan las
   operaciones.
+
+## Recuperacion, recursos y operacion
+
+- `RecoveryManager` nunca convierte un intento en una operacion completada.
+- Los leases vencidos y las tareas RUNNING sin lease se reintentan solo dentro
+  del limite de intentos; si no, se marcan FAILED.
+- Un worktree sucio no se borra ni se modifica automaticamente.
+- La limpieza solo elimina worktrees/snapshots limpios dentro de la retencion y
+  nunca borra ramas ni commits.
+- Las operaciones usan `operations` con clave idempotente y lease.
+- `ResourceGovernor` pausa el proyecto al superar tiempo, tokens o coste
+  estimado cuando el proyecto esta `RUNNING`.
+- `ORCH_MAX_AGENTS` y `ORCH_MAX_PARALLEL` limitan la concurrencia.
+- `serve` ejecuta recuperacion al iniciar si `ORCH_RECOVERY_ON_START=1`.
+- `diagnostics` es de solo lectura operativa; `recovery:run --apply` aplica
+  cambios seguros.
+- La outbox pendiente no se elimina sin transporte o decision humana.
+- No se declara produccion sin evaluacion de seguridad de red, sandbox de SO,
+  presupuesto y GUI.
 
 ## OpenCode V2
 

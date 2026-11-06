@@ -29,7 +29,7 @@ import type {
   ReviewId,
   TaskId,
 } from '../domain/ids.js'
-import { createId, nowIso } from '../domain/id-factory.js'
+import { addSecondsIso, createId, nowIso } from '../domain/id-factory.js'
 import { sha256 } from '../security/hash.js'
 import { redact, redactText } from '../security/redaction.js'
 import { SqliteDatabase } from './database.js'
@@ -488,6 +488,71 @@ function toFinalDelivery(row: DbRow): FinalDeliveryRecord {
   }
 }
 
+function toProjectResource(row: DbRow): ProjectResourceRecord {
+  return {
+    projectId: text(row, 'project_id') as ProjectId,
+    startedAt: text(row, 'started_at'),
+    inputTokens: integer(row, 'input_tokens'),
+    outputTokens: integer(row, 'output_tokens'),
+    estimatedCostUsd: Number(row['estimated_cost_usd'] ?? 0),
+    ...(optionalText(row, 'last_limit_code')
+      ? { lastLimitCode: optionalText(row, 'last_limit_code') }
+      : {}),
+    ...(optionalText(row, 'last_limit_at')
+      ? { lastLimitAt: optionalText(row, 'last_limit_at') }
+      : {}),
+    updatedAt: text(row, 'updated_at'),
+  }
+}
+
+function toOperation(row: DbRow): OperationRecord {
+  return {
+    id: text(row, 'id'),
+    projectId: text(row, 'project_id') as ProjectId,
+    kind: text(row, 'kind'),
+    idempotencyKey: text(row, 'idempotency_key'),
+    inputHash: text(row, 'input_hash'),
+    status: text(row, 'status') as OperationRecord['status'],
+    attempts: integer(row, 'attempts'),
+    leaseExpiresAt: text(row, 'lease_expires_at'),
+    ...(optionalText(row, 'result_json') ? { result: json(row, 'result_json') } : {}),
+    ...(optionalText(row, 'error') ? { error: optionalText(row, 'error') } : {}),
+    createdAt: text(row, 'created_at'),
+    updatedAt: text(row, 'updated_at'),
+  }
+}
+
+function toRecoveryRun(row: DbRow): RecoveryRunRecord {
+  return {
+    id: text(row, 'id'),
+    projectId: text(row, 'project_id') as ProjectId,
+    mode: text(row, 'mode') as RecoveryRunRecord['mode'],
+    status: text(row, 'status') as RecoveryRunRecord['status'],
+    findingsCount: integer(row, 'findings_count'),
+    appliedCount: integer(row, 'applied_count'),
+    summary: json(row, 'summary_json'),
+    ...(optionalText(row, 'error') ? { error: optionalText(row, 'error') } : {}),
+    startedAt: text(row, 'started_at'),
+    ...(optionalText(row, 'completed_at')
+      ? { completedAt: optionalText(row, 'completed_at') }
+      : {}),
+    createdAt: text(row, 'created_at'),
+  }
+}
+
+function toRecoveryAction(row: DbRow): RecoveryActionRecord {
+  return {
+    id: text(row, 'id'),
+    recoveryRunId: text(row, 'recovery_run_id'),
+    code: text(row, 'code'),
+    entityType: text(row, 'entity_type'),
+    ...(optionalText(row, 'entity_id') ? { entityId: optionalText(row, 'entity_id') } : {}),
+    status: text(row, 'status') as RecoveryActionRecord['status'],
+    detail: json(row, 'detail_json'),
+    createdAt: text(row, 'created_at'),
+  }
+}
+
 function toAuditEntry(row: DbRow): AuditEntry {
   return {
     id: text(row, 'id') as AuditId,
@@ -791,6 +856,57 @@ export interface FinalDeliveryRecord {
   readonly summary: Record<string, unknown>
   readonly createdAt: string
   readonly deliveredAt?: string
+}
+
+export interface ProjectResourceRecord {
+  readonly projectId: ProjectId
+  readonly startedAt: string
+  readonly inputTokens: number
+  readonly outputTokens: number
+  readonly estimatedCostUsd: number
+  readonly lastLimitCode?: string
+  readonly lastLimitAt?: string
+  readonly updatedAt: string
+}
+
+export interface OperationRecord {
+  readonly id: string
+  readonly projectId: ProjectId
+  readonly kind: string
+  readonly idempotencyKey: string
+  readonly inputHash: string
+  readonly status: 'RUNNING' | 'COMPLETED' | 'FAILED'
+  readonly attempts: number
+  readonly leaseExpiresAt: string
+  readonly result?: Record<string, unknown>
+  readonly error?: string
+  readonly createdAt: string
+  readonly updatedAt: string
+}
+
+export interface RecoveryRunRecord {
+  readonly id: string
+  readonly projectId: ProjectId
+  readonly mode: 'DRY_RUN' | 'APPLY'
+  readonly status: 'RUNNING' | 'COMPLETED' | 'FAILED'
+  readonly findingsCount: number
+  readonly appliedCount: number
+  readonly summary: Record<string, unknown>
+  readonly error?: string
+  readonly startedAt: string
+  readonly completedAt?: string
+  readonly createdAt: string
+}
+
+export interface RecoveryActionRecord {
+  readonly id: string
+  readonly recoveryRunId: string
+  readonly code: string
+  readonly entityType: string
+  readonly entityId?: string
+  readonly status: 'REQUIRED' | 'APPLIED' | 'SKIPPED' | 'FAILED'
+  readonly detail: Record<string, unknown>
+  readonly createdAt: string
 }
 
 export interface TaskAttemptRecord {
@@ -1506,6 +1622,17 @@ export class SqliteStore {
          WHERE project_id = ? AND to_agent_id = ?
          ORDER BY created_at DESC LIMIT ?`,
         [projectId, toAgentId, limit],
+      )
+      .map(toMessage)
+  }
+
+  listProjectMessages(projectId: ProjectId, state?: Message['state'], limit = 500): Message[] {
+    return this.db
+      .all<DbRow>(
+        `SELECT * FROM messages
+         WHERE project_id = ? ${state ? 'AND state = ?' : ''}
+         ORDER BY created_at DESC LIMIT ?`,
+        state ? [projectId, state, limit] : [projectId, limit],
       )
       .map(toMessage)
   }
@@ -2401,6 +2528,269 @@ export class SqliteStore {
     return this.getFinalDelivery(id)!
   }
 
+  ensureProjectResource(projectId: ProjectId, startedAt = nowIso()): ProjectResourceRecord {
+    const timestamp = nowIso()
+    this.db.run(
+      `INSERT INTO project_resources
+        (project_id, started_at, input_tokens, output_tokens, estimated_cost_usd, updated_at)
+       VALUES (?, ?, 0, 0, 0, ?)
+       ON CONFLICT(project_id) DO NOTHING`,
+      [projectId, startedAt, timestamp],
+    )
+    return this.getProjectResource(projectId)!
+  }
+
+  getProjectResource(projectId: ProjectId): ProjectResourceRecord | undefined {
+    const row = this.db.get<DbRow>('SELECT * FROM project_resources WHERE project_id = ?', [
+      projectId,
+    ])
+    return row ? toProjectResource(row) : undefined
+  }
+
+  recordProjectUsage(
+    projectId: ProjectId,
+    inputTokens: number,
+    outputTokens: number,
+    estimatedCostUsd: number,
+  ): ProjectResourceRecord {
+    const timestamp = nowIso()
+    this.db.run(
+      `INSERT INTO project_resources
+        (project_id, started_at, input_tokens, output_tokens, estimated_cost_usd, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?)
+       ON CONFLICT(project_id) DO UPDATE SET
+         input_tokens = input_tokens + excluded.input_tokens,
+         output_tokens = output_tokens + excluded.output_tokens,
+         estimated_cost_usd = estimated_cost_usd + excluded.estimated_cost_usd,
+         updated_at = excluded.updated_at`,
+      [projectId, timestamp, inputTokens, outputTokens, estimatedCostUsd, timestamp],
+    )
+    return this.getProjectResource(projectId)!
+  }
+
+  recordProjectLimit(projectId: ProjectId, code: string): ProjectResourceRecord {
+    const timestamp = nowIso()
+    this.db.run(
+      `INSERT INTO project_resources
+        (project_id, started_at, input_tokens, output_tokens, estimated_cost_usd, last_limit_code,
+         last_limit_at, updated_at)
+       VALUES (?, ?, 0, 0, 0, ?, ?, ?)
+       ON CONFLICT(project_id) DO UPDATE SET
+         last_limit_code = excluded.last_limit_code,
+         last_limit_at = excluded.last_limit_at,
+         updated_at = excluded.updated_at`,
+      [projectId, timestamp, code, timestamp, timestamp],
+    )
+    return this.getProjectResource(projectId)!
+  }
+
+  beginOperation(record: {
+    readonly projectId: ProjectId
+    readonly kind: string
+    readonly idempotencyKey: string
+    readonly inputHash: string
+    readonly leaseSeconds: number
+  }): { operation: OperationRecord; reused: boolean } {
+    return this.transaction(() => {
+      const existing = this.getOperationByKey(record.projectId, record.kind, record.idempotencyKey)
+      const timestamp = nowIso()
+      const leaseExpiresAt = addSecondsIso(record.leaseSeconds)
+      if (existing) {
+        if (existing.status === 'COMPLETED') return { operation: existing, reused: true }
+        if (existing.status === 'RUNNING' && existing.leaseExpiresAt > timestamp) {
+          throw new StoreConflictError(
+            `Operation ${existing.id} is already running with an active lease`,
+          )
+        }
+        this.db.run(
+          `UPDATE operations
+           SET status = 'RUNNING', attempts = attempts + 1, lease_expires_at = ?, error = NULL,
+               updated_at = ?
+           WHERE id = ?`,
+          [leaseExpiresAt, timestamp, existing.id],
+        )
+        return { operation: this.getOperation(existing.id)!, reused: true }
+      }
+      const id = createId('opr')
+      this.db.run(
+        `INSERT INTO operations
+          (id, project_id, kind, idempotency_key, input_hash, status, attempts, lease_expires_at,
+           created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 'RUNNING', 1, ?, ?, ?)`,
+        [
+          id,
+          record.projectId,
+          record.kind,
+          record.idempotencyKey,
+          record.inputHash,
+          leaseExpiresAt,
+          timestamp,
+          timestamp,
+        ],
+      )
+      return { operation: this.getOperation(id)!, reused: false }
+    })
+  }
+
+  getOperation(id: string): OperationRecord | undefined {
+    const row = this.db.get<DbRow>('SELECT * FROM operations WHERE id = ?', [id])
+    return row ? toOperation(row) : undefined
+  }
+
+  getOperationByKey(
+    projectId: ProjectId,
+    kind: string,
+    idempotencyKey: string,
+  ): OperationRecord | undefined {
+    const row = this.db.get<DbRow>(
+      'SELECT * FROM operations WHERE project_id = ? AND kind = ? AND idempotency_key = ?',
+      [projectId, kind, idempotencyKey],
+    )
+    return row ? toOperation(row) : undefined
+  }
+
+  completeOperation(id: string, result: Record<string, unknown>): OperationRecord {
+    const resultUpdate = this.db.run(
+      `UPDATE operations
+       SET status = 'COMPLETED', result_json = ?, error = NULL, updated_at = ?
+       WHERE id = ?`,
+      [JSON.stringify(redact(result)), nowIso(), id],
+    )
+    if (resultUpdate.changes === 0) throw new StoreConflictError(`Operation ${id} not found`)
+    return this.getOperation(id)!
+  }
+
+  failOperation(id: string, error: string): OperationRecord {
+    const result = this.db.run(
+      `UPDATE operations SET status = 'FAILED', error = ?, updated_at = ? WHERE id = ?`,
+      [redactText(error).slice(0, 2000), nowIso(), id],
+    )
+    if (result.changes === 0) throw new StoreConflictError(`Operation ${id} not found`)
+    return this.getOperation(id)!
+  }
+
+  listExpiredOperations(): OperationRecord[] {
+    return this.db
+      .all<DbRow>(
+        `SELECT * FROM operations
+         WHERE status = 'RUNNING' AND lease_expires_at <= ?
+         ORDER BY created_at`,
+        [nowIso()],
+      )
+      .map(toOperation)
+  }
+
+  listOperations(projectId: ProjectId): OperationRecord[] {
+    return this.db
+      .all<DbRow>('SELECT * FROM operations WHERE project_id = ? ORDER BY created_at DESC', [
+        projectId,
+      ])
+      .map(toOperation)
+  }
+
+  createRecoveryRun(record: {
+    readonly projectId: ProjectId
+    readonly mode: RecoveryRunRecord['mode']
+  }): RecoveryRunRecord {
+    const id = createId('rcv')
+    const timestamp = nowIso()
+    this.db.run(
+      `INSERT INTO recovery_runs
+        (id, project_id, mode, status, findings_count, applied_count, summary_json, started_at,
+         created_at)
+       VALUES (?, ?, ?, 'RUNNING', 0, 0, '{}', ?, ?)`,
+      [id, record.projectId, record.mode, timestamp, timestamp],
+    )
+    return this.getRecoveryRun(id)!
+  }
+
+  getRecoveryRun(id: string): RecoveryRunRecord | undefined {
+    const row = this.db.get<DbRow>('SELECT * FROM recovery_runs WHERE id = ?', [id])
+    return row ? toRecoveryRun(row) : undefined
+  }
+
+  updateRecoveryRun(
+    id: string,
+    patch: {
+      readonly status: RecoveryRunRecord['status']
+      readonly findingsCount?: number
+      readonly appliedCount?: number
+      readonly summary?: Record<string, unknown>
+      readonly error?: string
+    },
+  ): RecoveryRunRecord {
+    const result = this.db.run(
+      `UPDATE recovery_runs
+       SET status = ?, findings_count = COALESCE(?, findings_count),
+           applied_count = COALESCE(?, applied_count),
+           summary_json = COALESCE(?, summary_json), error = ?, completed_at = ?
+       WHERE id = ?`,
+      [
+        patch.status,
+        patch.findingsCount ?? null,
+        patch.appliedCount ?? null,
+        patch.summary ? JSON.stringify(redact(patch.summary)) : null,
+        patch.error ? redactText(patch.error).slice(0, 2000) : null,
+        patch.status === 'RUNNING' ? null : nowIso(),
+        id,
+      ],
+    )
+    if (result.changes === 0) throw new StoreConflictError(`Recovery run ${id} not found`)
+    return this.getRecoveryRun(id)!
+  }
+
+  listRecoveryRuns(projectId: ProjectId): RecoveryRunRecord[] {
+    return this.db
+      .all<DbRow>('SELECT * FROM recovery_runs WHERE project_id = ? ORDER BY started_at DESC', [
+        projectId,
+      ])
+      .map(toRecoveryRun)
+  }
+
+  createRecoveryAction(record: {
+    readonly recoveryRunId: string
+    readonly code: string
+    readonly entityType: string
+    readonly entityId?: string
+    readonly status: RecoveryActionRecord['status']
+    readonly detail: Record<string, unknown>
+  }): RecoveryActionRecord {
+    const id = createId('rca')
+    this.db.run(
+      `INSERT INTO recovery_actions
+        (id, recovery_run_id, code, entity_type, entity_id, status, detail_json, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        record.recoveryRunId,
+        record.code,
+        record.entityType,
+        record.entityId ?? null,
+        record.status,
+        JSON.stringify(redact(record.detail)),
+        nowIso(),
+      ],
+    )
+    const row = this.db.get<DbRow>('SELECT * FROM recovery_actions WHERE id = ?', [id])
+    return toRecoveryAction(row!)
+  }
+
+  listRecoveryActions(recoveryRunId: string): RecoveryActionRecord[] {
+    return this.db
+      .all<DbRow>('SELECT * FROM recovery_actions WHERE recovery_run_id = ? ORDER BY created_at', [
+        recoveryRunId,
+      ])
+      .map(toRecoveryAction)
+  }
+
+  countIntegrationRuns(projectId: ProjectId, planId: PlanId): number {
+    const row = this.db.get<DbRow>(
+      'SELECT COUNT(*) AS count FROM integration_runs WHERE project_id = ? AND plan_id = ?',
+      [projectId, planId],
+    )
+    return Number(row?.count ?? 0)
+  }
+
   countTable(table: string): number {
     if (!/^[a-z_]+$/.test(table)) throw new Error('Invalid table name')
     const row = this.db.get<{ count: number }>(`SELECT COUNT(*) AS count FROM ${table}`)
@@ -2423,4 +2813,8 @@ export {
   toIntegrationManifest,
   toFeedbackRun,
   toFinalDelivery,
+  toProjectResource,
+  toOperation,
+  toRecoveryRun,
+  toRecoveryAction,
 }

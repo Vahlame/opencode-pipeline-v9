@@ -71,10 +71,14 @@ export function registerPhase3Commands(program: Command): void {
         await withAdapter(context, async (adapter) => {
           const principal = decode(context, options)
           const projectId = getString(options, 'project') as ProjectId
+          const maxParallelLimit = Math.min(
+            context.config.ORCH_MAX_PARALLEL,
+            context.config.ORCH_MAX_AGENTS,
+          )
           const maxParallel =
-            typeof options['max-parallel'] === 'string'
-              ? Number(options['max-parallel'])
-              : context.config.ORCH_MAX_PARALLEL
+            typeof options.maxParallel === 'string'
+              ? Math.min(Number(options.maxParallel), maxParallelLimit)
+              : maxParallelLimit
           if (!Number.isFinite(maxParallel) || maxParallel < 1) {
             throw new OrchestratorError('BAD_REQUEST', '--max-parallel must be a positive number')
           }
@@ -82,19 +86,26 @@ export function registerPhase3Commands(program: Command): void {
             context.config.projectDir,
             context.config.worktreeRoot,
           )
-          const sessions = new SessionManager(context.store, adapter)
+          const sessions = new SessionManager(context.store, adapter, context.resources)
           const executor = new TaskExecutor(
             context.store,
             context.service,
             worktrees,
             sessions,
             context.config,
+            context.resources,
           )
-          const scheduler = new Scheduler(context.store, context.authz, executor, {
-            maxParallel,
-            leaseSeconds: context.config.ORCH_LEASE_SECONDS,
-            taskMaxAttempts: context.config.ORCH_TASK_MAX_ATTEMPTS,
-          })
+          const scheduler = new Scheduler(
+            context.store,
+            context.authz,
+            executor,
+            {
+              maxParallel,
+              leaseSeconds: context.config.ORCH_LEASE_SECONDS,
+              taskMaxAttempts: context.config.ORCH_TASK_MAX_ATTEMPTS,
+            },
+            context.resources,
+          )
           const results = await scheduler.runOnce(principal, projectId)
           output({
             results,
@@ -119,19 +130,29 @@ export function registerPhase3Commands(program: Command): void {
             context.config.projectDir,
             context.config.worktreeRoot,
           )
-          const sessions = new SessionManager(context.store, adapter)
+          const sessions = new SessionManager(context.store, adapter, context.resources)
           const executor = new TaskExecutor(
             context.store,
             context.service,
             worktrees,
             sessions,
             context.config,
+            context.resources,
           )
-          const scheduler = new Scheduler(context.store, context.authz, executor, {
-            maxParallel: context.config.ORCH_MAX_PARALLEL,
-            leaseSeconds: context.config.ORCH_LEASE_SECONDS,
-            taskMaxAttempts: context.config.ORCH_TASK_MAX_ATTEMPTS,
-          })
+          const scheduler = new Scheduler(
+            context.store,
+            context.authz,
+            executor,
+            {
+              maxParallel: Math.min(
+                context.config.ORCH_MAX_PARALLEL,
+                context.config.ORCH_MAX_AGENTS,
+              ),
+              leaseSeconds: context.config.ORCH_LEASE_SECONDS,
+              taskMaxAttempts: context.config.ORCH_TASK_MAX_ATTEMPTS,
+            },
+            context.resources,
+          )
           output({
             recovered: scheduler.recoverExpiredLeases(
               principal,
@@ -205,7 +226,7 @@ export function registerPhase3Commands(program: Command): void {
             type: 'session',
             id: record.id,
           })
-          const sessions = new SessionManager(context.store, adapter)
+          const sessions = new SessionManager(context.store, adapter, context.resources)
           await sessions.interrupt(record)
           output({ stopped: record.id })
         })

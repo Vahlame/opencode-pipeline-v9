@@ -5,6 +5,10 @@ import type { AppContext } from '../app/context.js'
 import { loadConfig } from '../config/env.js'
 import { startApiServer } from '../api/server.js'
 import { SqliteStore } from '../persistence/store.js'
+import { createOpenCodeAdapter } from '../opencode/factory.js'
+import { WorktreeManager } from '../worktrees/manager.js'
+import { RecoveryManager } from '../recovery/manager.js'
+import type { OpenCodeAdapter } from '../opencode/adapter.js'
 import type {
   AgentId,
   MessageId,
@@ -25,8 +29,13 @@ function printJson(value: unknown): void {
   process.stdout.write(`${JSON.stringify(value, null, 2)}\n`)
 }
 
+function optionValue(options: CliOptions, key: string): string | boolean | number | undefined {
+  const camel = key.replace(/-([a-z])/g, (_, letter: string) => letter.toUpperCase())
+  return options[key] ?? options[camel]
+}
+
 function getString(options: CliOptions, key: string, required = true): string {
-  const value = options[key]
+  const value = optionValue(options, key)
   if (typeof value !== 'string' || value.length === 0) {
     if (required) throw new OrchestratorError('BAD_REQUEST', `--${key} is required`)
     return ''
@@ -35,12 +44,12 @@ function getString(options: CliOptions, key: string, required = true): string {
 }
 
 function getOptionalString(options: CliOptions, key: string): string | undefined {
-  const value = options[key]
+  const value = optionValue(options, key)
   return typeof value === 'string' && value.length > 0 ? value : undefined
 }
 
 function getNumber(options: CliOptions, key: string, fallback?: number): number {
-  const value = options[key]
+  const value = optionValue(options, key)
   if (value === undefined || value === '') {
     if (fallback === undefined) throw new OrchestratorError('BAD_REQUEST', `--${key} is required`)
     return fallback
@@ -101,6 +110,55 @@ function addToken(command: Command): Command {
 
 function addProject(command: Command): Command {
   return command.option('--project <id>', 'project ID')
+}
+
+async function runStartupRecovery(context: AppContext): Promise<void> {
+  if (!context.config.ORCH_RECOVERY_ON_START) return
+  const terminal = new Set(['COMPLETED', 'FAILED', 'CANCELLED'])
+  const projects = context.store.listProjects().filter((project) => !terminal.has(project.status))
+  if (projects.length === 0) return
+  let adapter: OpenCodeAdapter | undefined
+  try {
+    adapter = await createOpenCodeAdapter(context.config)
+  } catch (error) {
+    process.stderr.write(
+      `Recovery sin inspector OpenCode: ${error instanceof Error ? error.message : String(error)}\n`,
+    )
+  }
+  try {
+    const recovery = new RecoveryManager(
+      context.store,
+      context.authz,
+      new WorktreeManager(context.config.projectDir, context.config.worktreeRoot),
+      {
+        staleMinutes: context.config.ORCH_RECOVERY_STALE_MINUTES,
+        taskMaxAttempts: context.config.ORCH_TASK_MAX_ATTEMPTS,
+        leaseSeconds: context.config.ORCH_LEASE_SECONDS,
+        operationLeaseSeconds: context.config.ORCH_OPERATION_LEASE_SECONDS,
+      },
+      adapter,
+      context.resources,
+    )
+    const internal: Principal = {
+      subjectId: 'system:startup-recovery',
+      kind: 'HUMAN',
+      role: 'HUMAN',
+    }
+    for (const project of projects) {
+      try {
+        const result = await recovery.run(internal, project.id, { apply: true })
+        process.stdout.write(
+          `Recovery ${project.id}: ${result.actions.length} hallazgos, ${result.applied} aplicados, reused=${result.reused}\n`,
+        )
+      } catch (error) {
+        process.stderr.write(
+          `Recovery ${project.id} fallo: ${error instanceof Error ? error.message : String(error)}\n`,
+        )
+      }
+    }
+  } finally {
+    await adapter?.close()
+  }
 }
 
 export function registerPhase2Commands(program: Command): void {
@@ -598,7 +656,7 @@ export function registerPhase2Commands(program: Command): void {
           context.service.deliverMessage(
             decodeToken(context, options),
             getString(options, 'message') as MessageId,
-            options['safe-point'] === true,
+            options.safePoint === true,
           ),
         )
       })
@@ -734,6 +792,7 @@ export function registerPhase2Commands(program: Command): void {
     .option('--port <port>', 'puerto')
     .action(async (options: CliOptions) => {
       const context = createAppContext()
+      await runStartupRecovery(context)
       const handle = await startApiServer(context, {
         ...(getOptionalString(options, 'host') ? { host: getString(options, 'host') } : {}),
         ...(getOptionalString(options, 'port') ? { port: getNumber(options, 'port') } : {}),

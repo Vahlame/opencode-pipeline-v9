@@ -9,11 +9,13 @@ import type {
   TranscriptMessage,
 } from '../opencode/adapter.js'
 import type { SessionRecord, SqliteStore, WorktreeRecord } from '../persistence/store.js'
+import type { ResourceGovernor } from '../resources/governor.js'
 
 export class SessionManager {
   constructor(
     private readonly store: SqliteStore,
     private readonly adapter: OpenCodeAdapter,
+    private readonly resources?: ResourceGovernor,
   ) {}
 
   async createForTaskAsync(input: {
@@ -102,6 +104,7 @@ export class SessionManager {
   async prompt(record: SessionRecord, text: string): Promise<void> {
     if (!record.opencodeSessionId)
       throw new Error(`Session ${record.id} has no OpenCode session id`)
+    this.resources?.recordUsage(record.projectId, this.resources.estimateTokens(text), 0)
     await this.adapter.prompt({
       sessionID: record.opencodeSessionId,
       text,
@@ -124,6 +127,13 @@ export class SessionManager {
       throw new Error(`OpenCode session ${record.opencodeSessionId} failed during execution`)
     }
     const transcript = await this.adapter.getTranscript(record.opencodeSessionId)
+    const output = transcript
+      .filter((message) => message.role === 'assistant')
+      .map((message) => message.text)
+      .join('\n')
+    if (output.length > 0) {
+      this.resources?.recordUsage(record.projectId, 0, this.resources.estimateTokens(output))
+    }
     this.store.transaction(() => {
       this.store.updateSessionStatus(record.id, 'IDLE')
       this.emit(record.projectId, 'session.idle', 'session', record.id, record.agentId, {

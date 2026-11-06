@@ -12,6 +12,7 @@ import { registerPhase2Commands } from './cli/phase2.js'
 import { registerPhase3Commands } from './cli/phase3.js'
 import { registerPhase4Commands } from './cli/phase4.js'
 import { registerPhase5Commands } from './cli/phase5.js'
+import { registerPhase6Commands } from './cli/phase6.js'
 import { SqliteStore } from './persistence/store.js'
 
 loadDotEnv({ quiet: true })
@@ -84,6 +85,9 @@ async function runDoctor(config: AppConfig): Promise<void> {
     integrationManifests: store.countTable('integration_manifests'),
     feedbackRuns: store.countTable('feedback_runs'),
     finalDeliveries: store.countTable('final_deliveries'),
+    recoveryRuns: store.countTable('recovery_runs'),
+    operations: store.countTable('operations'),
+    projectResources: store.countTable('project_resources'),
   }
   store.close()
 
@@ -91,7 +95,7 @@ async function runDoctor(config: AppConfig): Promise<void> {
     const health = await adapter.health()
     const agents = health.ok ? await adapter.listAgents({ directory: config.projectDir }) : []
     const report = {
-      phase: 5,
+      phase: 6,
       node: process.version,
       authSecretConfigured: Boolean(config.ORCH_AUTH_SECRET),
       db: {
@@ -103,6 +107,9 @@ async function runDoctor(config: AppConfig): Promise<void> {
         integrationManifests: db.integrationManifests,
         feedbackRuns: db.feedbackRuns,
         finalDeliveries: db.finalDeliveries,
+        recoveryRuns: db.recoveryRuns,
+        operations: db.operations,
+        projectResources: db.projectResources,
       },
       platform: `${process.platform}/${process.arch}`,
       projectDir: config.projectDir,
@@ -181,8 +188,8 @@ interface SmokeCommandOptions {
 const program = new Command()
 program
   .name('orch')
-  .description('OpenCode Multiagent Orchestrator V9 - Fase 5 (integracion y feedback)')
-  .version('0.5.0')
+  .description('OpenCode Multiagent Orchestrator V9 - Fase 6 (recuperacion y operacion)')
+  .version('0.6.0')
 
 program
   .command('doctor')
@@ -215,6 +222,7 @@ registerPhase2Commands(program)
 registerPhase3Commands(program)
 registerPhase4Commands(program)
 registerPhase5Commands(program)
+registerPhase6Commands(program)
 
 program.parseAsync(process.argv).catch((error: unknown) => {
   const message = error instanceof Error ? error.message : String(error)

@@ -86,3 +86,18 @@ ejecución ni entrega de mensajes a sesiones ocupadas.
 El integrador no confia en el agente para decidir aprobaciones, rutas, hashes ni
 transiciones. El feedback no puede aprobar por si solo: el orquestador valida
 plan, manifiesto, commits, aprobaciones, pruebas y evidencia.
+
+## Anadido en la Fase 6
+
+- `src/recovery/`: reconciliacion de sesiones, leases, tareas, worktrees,
+  jurados, integraciones, feedback, mensajes, outbox y operaciones parciales.
+- `src/operations/`: diario idempotente con clave unica, lease y resultado.
+- `src/resources/`: estimacion de tokens/coste, limites y pausa del proyecto.
+- `src/recovery/maintenance.ts`: limpieza segura de worktrees/snapshots limpios.
+- CLI `status`, `usage`, `diagnostics`, `recovery:*`, `maintenance:cleanup` y
+  `delivery:export`.
+- `serve` ejecuta recuperacion al arrancar para proyectos no terminales.
+
+La recuperacion nunca interpreta un intento como exito. Un worktree sucio no se
+borra, una operacion con lease vigente no se duplica y un proyecto terminal no se
+muta por recuperacion.

@@ -8,6 +8,7 @@ import type { SqliteStore } from '../persistence/store.js'
 import type { SessionManager } from '../sessions/manager.js'
 import type { WorktreeManager } from '../worktrees/manager.js'
 import type { TaskClaim, TaskExecutionResult } from './execution-types.js'
+import type { ResourceGovernor } from '../resources/governor.js'
 
 class TestFailureError extends Error {
   readonly code = 'TEST_FAILURE'
@@ -24,6 +25,7 @@ export class TaskExecutor {
     private readonly worktrees: WorktreeManager,
     private readonly sessions: SessionManager,
     private readonly config: AppConfig,
+    private readonly resources?: ResourceGovernor,
   ) {}
 
   async execute(claim: TaskClaim): Promise<TaskExecutionResult> {
@@ -33,6 +35,7 @@ export class TaskExecutor {
     let opencodeSessionId: string | undefined
     let timer: NodeJS.Timeout | undefined
     try {
+      this.resources?.assertAvailable(task.projectId)
       const worktree = this.getOrCreateWorktree(task)
       const session = await this.sessions.createForTaskAsync({
         task,
@@ -207,6 +210,28 @@ export class TaskExecutor {
     contract: Contract,
     worktreePath: string,
   ): string {
+    const tasks = this.store.listTasks(task.projectId)
+    const modules = this.store.listModules(task.projectId)
+    const dependencies = this.store.listDependenciesForProject(task.projectId)
+    const sharedState = {
+      projectId: task.projectId,
+      planId: task.planId,
+      tasks: tasks.map((candidate) => ({
+        id: candidate.id,
+        title: candidate.title,
+        state: candidate.state,
+        moduleId: candidate.moduleId ?? null,
+        dependencies: dependencies
+          .filter((dependency) => dependency.taskId === candidate.id)
+          .map((dependency) => dependency.dependsOnTaskId),
+      })),
+      modules: modules.map((module) => ({
+        id: module.id,
+        name: module.name,
+        status: module.status,
+        currentVersionId: module.currentVersionId ?? null,
+      })),
+    }
     return [
       'Eres un especialista trabajando en un worktree Git aislado.',
       `Worktree: ${worktreePath}`,
@@ -226,6 +251,9 @@ export class TaskExecutor {
         null,
         2,
       ),
+      '',
+      'Estado compartido de solo lectura (no incluye mensajes privados):',
+      JSON.stringify(sharedState, null, 2),
       '',
       'Reglas:',
       '- Edita únicamente las rutas permitidas.',

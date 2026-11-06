@@ -17,6 +17,8 @@ import { redactText } from '../security/redaction.js'
 import { WorktreeError, matchesAllowedPath } from '../worktrees/manager.js'
 import type { TestCommandResult } from '../worktrees/manager.js'
 import { ConflictError, NotFoundError, ValidationError } from '../orchestrator/errors.js'
+import type { ResourceGovernor } from '../resources/governor.js'
+import { ResourceLimitError } from '../resources/governor.js'
 import {
   IntegrationAdapterSpecSchema,
   IntegrationRequestSchema,
@@ -43,6 +45,8 @@ export interface IntegrationManagerOptions {
   readonly baseRef: string
   readonly testsTimeoutMs: number
   readonly worktreeRoot: string
+  readonly maxAttempts?: number
+  readonly resources?: ResourceGovernor
 }
 
 export interface IntegrationResult {
@@ -182,6 +186,15 @@ export class IntegrationManager {
     }
     if (!['RUNNING', 'INTEGRATING'].includes(project.status)) {
       throw new ConflictError(`Project is ${project.status}; integration requires RUNNING`)
+    }
+    const maxAttempts = this.options.maxAttempts ?? 5
+    if (this.store.countIntegrationRuns(projectId, planId) >= maxAttempts) {
+      if (this.options.resources) {
+        this.options.resources.pauseForLimit(projectId, 'max_integration_attempts')
+      } else {
+        this.store.recordProjectLimit(projectId, 'max_integration_attempts')
+      }
+      throw new ResourceLimitError(projectId, 'max_integration_attempts')
     }
 
     const structural = prepared.issues.filter((issue) => issue.type === 'STRUCTURAL')

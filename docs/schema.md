@@ -1,13 +1,13 @@
-# Esquema SQLite - Fase 5
+# Esquema SQLite - Fase 6
 
 ## Ubicacion y migraciones
 
 - Base por defecto: `.runtime/orchestrator.db` (ignorada por Git).
-- Migraciones: `migrations/001_initial.sql`, `002_phase3.sql`, `003_phase4.sql`
-  y `004_phase5.sql`.
+- Migraciones: `migrations/001_initial.sql`, `002_phase3.sql`, `003_phase4.sql`,
+  `004_phase5.sql` y `005_phase6.sql`.
 - Runner: `src/persistence/database.ts`.
 - Tabla de control: `schema_migrations`.
-- Version actual del esquema: **4**.
+- Version actual del esquema: **5**.
 
 La conexion usa `node:sqlite`, `PRAGMA foreign_keys=ON`, WAL para archivos,
 `busy_timeout=5000` y transacciones `BEGIN IMMEDIATE` para escrituras.
@@ -46,6 +46,10 @@ La conexion usa `node:sqlite`, `PRAGMA foreign_keys=ON`, WAL para archivos,
 | `integration_manifests` | Manifiesto reproducible            | PK `id`; FK proyecto/plan/run; unico `(project, hash)` y `(run)`                |
 | `feedback_runs`         | Evaluacion global                  | PK `id`; FK proyecto/plan/manifest; unico `(manifest)`                          |
 | `final_deliveries`      | Entrega preparada/entregada        | PK `id`; FK proyecto/manifest/feedback; unico `(manifest)`                      |
+| `project_resources`     | Tokens, coste y tiempo estimados   | PK/FK proyecto; contadores y ultimo limite                                      |
+| `operations`            | Diario idempotente de operaciones  | PK `id`; unico `(project, kind, idempotency_key)`; lease y resultado            |
+| `recovery_runs`         | Ejecuciones de recuperacion        | PK `id`; FK proyecto; modo, estado, hallazgos y aplicados                       |
+| `recovery_actions`      | Acciones de recuperacion           | PK `id`; FK run; codigo, entidad, estado y detalle                              |
 
 ## Relaciones principales
 
@@ -76,6 +80,9 @@ projects
   |     +-- integration_manifests
   +-- feedback_runs
   +-- final_deliveries
+  +-- project_resources
+  +-- operations
+  +-- recovery_runs +-- recovery_actions
 ```
 
 ## Invariantes
@@ -102,6 +109,12 @@ projects
 - Un `FAIL` de feedback no crea entrega final.
 - Una entrega final solo pasa a `DELIVERED` con feedback `PASS` y aprobacion
   humana.
+- Una operacion idempotente no se ejecuta dos veces si su lease sigue vigente.
+- Un lease vencido puede tomarse una sola vez como reintento.
+- Un worktree sucio nunca se elimina automaticamente.
+- Un proyecto terminal no se muta por recuperacion; solo se diagnostica o se
+  limpian worktrees limpios.
+- El control de recursos pausa el proyecto y registra el limite alcanzado.
 
 ## Estados de tarea
 

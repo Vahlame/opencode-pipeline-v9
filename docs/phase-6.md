@@ -423,9 +423,9 @@ npx tsx src/cli.ts maintenance:cleanup --project <project-id> --keep-days 7 --to
 ## Verificacion final
 
 ```text
-npm run check       -> 99 pruebas pasan, 2 omitidas
+npm run check       -> 100 pruebas pasan, 2 omitidas
 npm run build       -> pasa
-npm run db:migrate  -> esquema 7
+npm run db:migrate  -> esquema 8
 npm run test:real   -> 1 prueba real pasa
 npm run test:sdk    -> 1 prueba SDK pasa
 npm run doctor      -> fase 6, OpenCode V2.2.5, 13 perfiles

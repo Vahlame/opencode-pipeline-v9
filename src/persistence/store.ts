@@ -283,6 +283,8 @@ function toSessionRecord(row: DbRow): SessionRecord {
     ...(optionalText(row, 'worktree_path')
       ? { worktreePath: optionalText(row, 'worktree_path') }
       : {}),
+    ...(optionalText(row, 'task_id') ? { taskId: optionalText(row, 'task_id') as TaskId } : {}),
+    ...(optionalText(row, 'purpose') ? { purpose: optionalText(row, 'purpose') } : {}),
     status: text(row, 'status') as SessionRecord['status'],
     ...(optionalText(row, 'last_event_seq')
       ? { lastEventSeq: Number(optionalText(row, 'last_event_seq')) }
@@ -582,6 +584,23 @@ function toProviderUsage(row: DbRow): ProviderUsageRecord {
   }
 }
 
+function toUsageEvent(row: DbRow): UsageEventRecord {
+  return {
+    id: text(row, 'id'),
+    projectId: text(row, 'project_id') as ProjectId,
+    ...(optionalText(row, 'agent_id') ? { agentId: optionalText(row, 'agent_id') as AgentId } : {}),
+    ...(optionalText(row, 'task_id') ? { taskId: optionalText(row, 'task_id') as TaskId } : {}),
+    ...(optionalText(row, 'session_id') ? { sessionId: optionalText(row, 'session_id') } : {}),
+    purpose: text(row, 'purpose'),
+    source: text(row, 'source') as UsageEventRecord['source'],
+    inputTokens: integer(row, 'input_tokens'),
+    outputTokens: integer(row, 'output_tokens'),
+    costUsd: Number(row['cost_usd'] ?? 0),
+    ...(optionalText(row, 'request_id') ? { requestId: optionalText(row, 'request_id') } : {}),
+    createdAt: text(row, 'created_at'),
+  }
+}
+
 function toAuditEntry(row: DbRow): AuditEntry {
   return {
     id: text(row, 'id') as AuditId,
@@ -738,6 +757,8 @@ export interface SessionRecord {
   readonly agentId: AgentId
   readonly opencodeSessionId?: string
   readonly worktreePath?: string
+  readonly taskId?: TaskId
+  readonly purpose?: string
   readonly status: 'STARTING' | 'ACTIVE' | 'IDLE' | 'STOPPED' | 'FAILED'
   readonly lastEventSeq?: number
   readonly createdAt: string
@@ -960,6 +981,21 @@ export interface ProviderUsageRecord {
   readonly outputTokens: number
   readonly costUsd: number
   readonly raw?: Record<string, unknown>
+  readonly createdAt: string
+}
+
+export interface UsageEventRecord {
+  readonly id: string
+  readonly projectId: ProjectId
+  readonly agentId?: AgentId
+  readonly taskId?: TaskId
+  readonly sessionId?: string
+  readonly purpose: string
+  readonly source: 'estimate' | 'provider'
+  readonly inputTokens: number
+  readonly outputTokens: number
+  readonly costUsd: number
+  readonly requestId?: string
   readonly createdAt: string
 }
 
@@ -1242,20 +1278,25 @@ export class SqliteStore {
     readonly agentId: AgentId
     readonly opencodeSessionId?: string
     readonly worktreePath?: string
+    readonly taskId?: TaskId
+    readonly purpose?: string
     readonly status?: SessionRecord['status']
   }): SessionRecord {
     const id = createId('ses')
     const timestamp = nowIso()
     this.db.run(
       `INSERT INTO sessions
-        (id, project_id, agent_id, opencode_session_id, worktree_path, status, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        (id, project_id, agent_id, opencode_session_id, worktree_path, task_id, purpose, status,
+         created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         id,
         record.projectId,
         record.agentId,
         record.opencodeSessionId ?? null,
         record.worktreePath ?? null,
+        record.taskId ?? null,
+        record.purpose ?? null,
         record.status ?? 'STARTING',
         timestamp,
         timestamp,
@@ -2964,6 +3005,90 @@ export class SqliteStore {
     }
   }
 
+  createUsageEvent(record: {
+    readonly projectId: ProjectId
+    readonly agentId?: AgentId
+    readonly taskId?: TaskId
+    readonly sessionId?: string
+    readonly purpose: string
+    readonly source: UsageEventRecord['source']
+    readonly inputTokens: number
+    readonly outputTokens: number
+    readonly costUsd: number
+    readonly requestId?: string
+  }): UsageEventRecord {
+    const id = createId('use')
+    this.db.run(
+      `INSERT INTO usage_events
+        (id, project_id, agent_id, task_id, session_id, purpose, source, input_tokens,
+         output_tokens, cost_usd, request_id, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        record.projectId,
+        record.agentId ?? null,
+        record.taskId ?? null,
+        record.sessionId ?? null,
+        record.purpose,
+        record.source,
+        record.inputTokens,
+        record.outputTokens,
+        record.costUsd,
+        record.requestId ?? null,
+        nowIso(),
+      ],
+    )
+    const row = this.db.get<DbRow>('SELECT * FROM usage_events WHERE id = ?', [id])
+    return toUsageEvent(row!)
+  }
+
+  listUsageEvents(projectId: ProjectId): UsageEventRecord[] {
+    return this.db
+      .all<DbRow>('SELECT * FROM usage_events WHERE project_id = ? ORDER BY created_at DESC', [
+        projectId,
+      ])
+      .map(toUsageEvent)
+  }
+
+  usageBreakdown(
+    projectId: ProjectId,
+    by: 'agent' | 'task' | 'purpose' | 'session',
+  ): Array<{
+    key: string
+    source: string
+    inputTokens: number
+    outputTokens: number
+    costUsd: number
+    entries: number
+  }> {
+    const column =
+      by === 'agent'
+        ? "COALESCE(agent_id, 'unknown')"
+        : by === 'task'
+          ? "COALESCE(task_id, 'unassigned')"
+          : by === 'session'
+            ? "COALESCE(session_id, 'unknown')"
+            : 'purpose'
+    const rows = this.db.all<DbRow>(
+      `SELECT ${column} AS key, source,
+              COALESCE(SUM(input_tokens), 0) AS input,
+              COALESCE(SUM(output_tokens), 0) AS output,
+              COALESCE(SUM(cost_usd), 0) AS cost,
+              COUNT(*) AS entries
+       FROM usage_events WHERE project_id = ?
+       GROUP BY key, source ORDER BY key, source`,
+      [projectId],
+    )
+    return rows.map((row) => ({
+      key: String(row['key']),
+      source: String(row['source']),
+      inputTokens: Number(row['input']),
+      outputTokens: Number(row['output']),
+      costUsd: Number(row['cost']),
+      entries: Number(row['entries']),
+    }))
+  }
+
   countTable(table: string): number {
     if (!/^[a-z_]+$/.test(table)) throw new Error('Invalid table name')
     const row = this.db.get<{ count: number }>(`SELECT COUNT(*) AS count FROM ${table}`)
@@ -2992,4 +3117,5 @@ export {
   toRecoveryAction,
   toArtifactSignature,
   toProviderUsage,
+  toUsageEvent,
 }

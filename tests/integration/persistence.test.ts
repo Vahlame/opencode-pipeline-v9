@@ -8,7 +8,7 @@ describe('SQLite persistence', () => {
   it('applies migrations and creates the required tables', () => {
     const store = SqliteStore.open(':memory:')
     try {
-      expect(store.schemaVersion).toBe(7)
+      expect(store.schemaVersion).toBe(8)
       const tables = store.db
         .all<{ name: string }>("SELECT name FROM sqlite_master WHERE type = 'table'")
         .map((row) => row.name)
@@ -49,6 +49,7 @@ describe('SQLite persistence', () => {
         'recovery_actions',
         'artifact_signatures',
         'provider_usage',
+        'usage_events',
       ]) {
         expect(tables).toContain(table)
       }

@@ -25,6 +25,8 @@
     "smoke": "tsx src/cli.ts smoke",
     "db:migrate": "tsx src/cli.ts db:migrate",
     "serve": "tsx src/cli.ts serve",
+    "open": "powershell -ExecutionPolicy Bypass -File scripts/start-orchestrator.ps1",
+    "shortcut": "powershell -ExecutionPolicy Bypass -File scripts/create-shortcut.ps1",
     "check": "npm run format:check && npm run typecheck && npm run lint && npm test"
   },
   "dependencies": {

@@ -65,6 +65,8 @@ export class OpenCodeJudgeExecutor implements JudgeExecutor {
       agent,
       directory: input.snapshotPath,
       title: `Jury ${role} - ${input.moduleVersion.id}`,
+      taskId: input.task.id,
+      purpose: `judge:${role}`,
       metadata: {
         role,
         moduleVersionId: input.moduleVersion.id,

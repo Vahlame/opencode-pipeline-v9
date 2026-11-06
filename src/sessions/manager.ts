@@ -1,5 +1,5 @@
 import type { Agent, Contract, Event, Task } from '../domain/index.js'
-import type { ProjectId } from '../domain/ids.js'
+import type { ProjectId, TaskId } from '../domain/ids.js'
 import { nowIso } from '../domain/id-factory.js'
 import type {
   ModelReference,
@@ -48,6 +48,8 @@ export class SessionManager {
         agentId: input.agent.id,
         opencodeSessionId: view.id,
         worktreePath: input.worktree.path,
+        taskId: input.task.id,
+        purpose: 'task',
         status: 'ACTIVE',
       })
       this.emit(input.task.projectId, 'session.created', 'session', created.id, input.agent.id, {
@@ -65,6 +67,8 @@ export class SessionManager {
     readonly agent: Agent
     readonly directory: string
     readonly title: string
+    readonly taskId?: TaskId
+    readonly purpose?: string
     readonly metadata?: Record<string, string | number | boolean | null>
     readonly model?: ModelReference
   }): Promise<{ record: SessionRecord; view: SessionView }> {
@@ -93,6 +97,8 @@ export class SessionManager {
         agentId: input.agent.id,
         opencodeSessionId: view.id,
         worktreePath: input.directory,
+        ...(input.taskId ? { taskId: input.taskId } : {}),
+        purpose: input.purpose ?? 'read-only',
         status: 'ACTIVE',
       })
       this.emit(input.projectId, 'session.review.created', 'session', created.id, input.agent.id, {
@@ -107,7 +113,7 @@ export class SessionManager {
   async prompt(record: SessionRecord, text: string): Promise<void> {
     if (!record.opencodeSessionId)
       throw new Error(`Session ${record.id} has no OpenCode session id`)
-    this.resources?.recordUsage(record.projectId, this.resources.estimateTokens(text), 0)
+    this.recordUsage(record, this.resources?.estimateTokens(text) ?? 0, 0)
     await this.adapter.prompt({
       sessionID: record.opencodeSessionId,
       text,
@@ -135,7 +141,7 @@ export class SessionManager {
       .map((message) => message.text)
       .join('\n')
     if (output.length > 0) {
-      this.resources?.recordUsage(record.projectId, 0, this.resources.estimateTokens(output))
+      this.recordUsage(record, 0, this.resources?.estimateTokens(output) ?? 0)
     }
     this.store.transaction(() => {
       this.store.updateSessionStatus(record.id, 'IDLE')
@@ -213,6 +219,25 @@ export class SessionManager {
       )
     })
     return { delivered: messages.length, deferred: 0 }
+  }
+
+  private recordUsage(record: SessionRecord, inputTokens: number, outputTokens: number): void {
+    if (!this.resources) return
+    const inputCost = (inputTokens / 1_000_000) * this.resources.limits.inputCostPerMillion
+    const outputCost = (outputTokens / 1_000_000) * this.resources.limits.outputCostPerMillion
+    const costUsd = inputCost + outputCost
+    this.resources.recordUsage(record.projectId, inputTokens, outputTokens)
+    this.store.createUsageEvent({
+      projectId: record.projectId,
+      agentId: record.agentId,
+      ...(record.taskId ? { taskId: record.taskId } : {}),
+      sessionId: record.id,
+      purpose: record.purpose ?? 'session',
+      source: 'estimate',
+      inputTokens,
+      outputTokens,
+      costUsd,
+    })
   }
 
   private permissionsFor(

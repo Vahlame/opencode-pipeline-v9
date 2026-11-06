@@ -67,6 +67,7 @@ export class OpenCodeFeedbackExecutor implements FeedbackExecutor {
       agent,
       directory: input.snapshotPath,
       title: `Feedback global - ${input.manifest.hash.slice(0, 16)}`,
+      purpose: 'feedback',
       metadata: {
         role: 'FEEDBACK',
         manifestId: input.manifest.id,

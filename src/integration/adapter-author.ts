@@ -44,6 +44,8 @@ export class OpenCodeAdapterAuthor implements AdapterAuthor {
       agent,
       directory: this.config.projectDir,
       title: `Adapter proposal - ${input.module.name}`,
+      taskId: input.contract.taskId,
+      purpose: 'adapter-author',
       metadata: {
         role: 'INTEGRATOR',
         moduleId: input.module.id,

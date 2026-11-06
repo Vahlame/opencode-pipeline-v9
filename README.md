@@ -21,7 +21,7 @@ operacion observable.
 - Modelo actual: `opencode-go/deepseek-v4.1-flash`.
 - Runtime interactivo: `HttpOpenCodeAdapter` contra el servidor OpenCode V2 de la app.
 - Runtime CI/headless: `SdkOpenCodeAdapter`; pruebas: `MockOpenCodeAdapter`.
-- Persistencia local en `.runtime/orchestrator.db` (esquema **7**).
+- Persistencia local en `.runtime/orchestrator.db` (esquema **8**).
 - Entrega final legible: `docs/entrega-final.md`.
 
 ## Requisitos
@@ -210,7 +210,7 @@ y reglas ordenadas. No se usan campos V1 como `permission`, `bash` o `maxSteps`.
 - `docs/architecture.md`: decisiones y limites.
 - `docs/phase-1.md` a `docs/phase-6.md`: alcance y evidencias por fase.
 - `docs/entrega-final.md`: entrega final legible.
-- `docs/ui-review.md`: revision UI/UX y hallazgos corregidos.
+- `docs/ui-review.md`: revision UI/UX y hallazgos corregidos.\n- `docs/install-virgin.md`: instalacion en Windows/OpenCode limpio.
 - `docs/schema.md`: esquema SQLite, relaciones e invariantes.
 - `docs/opencode-v2.md`: notas de integracion V2.
 - `AGENTS.md`: instrucciones persistentes para agentes.
@@ -218,9 +218,9 @@ y reglas ordenadas. No se usan campos V1 como `permission`, `bash` o `maxSteps`.
 ## Resultado de la Fase 6
 
 ```text
-npm run check       -> 99 pruebas pasan, 2 omitidas
+npm run check       -> 100 pruebas pasan, 2 omitidas
 npm run build       -> pasa
-npm run db:migrate  -> esquema 7
+npm run db:migrate  -> esquema 8
 npm run test:real   -> 1 prueba real pasa
 npm run test:sdk    -> 1 prueba SDK pasa
 ```

@@ -406,6 +406,38 @@ export function registerPhase6Commands(program: Command): void {
       }
     })
 
+  addProject(addToken(program.command('usage:breakdown')))
+    .description('Desglosa tokens/coste por agente, tarea, sesion o proposito')
+    .option('--by <group>', 'agent | task | session | purpose', 'agent')
+    .option('--json', 'salida JSON')
+    .action(async (options: CliOptions) => {
+      const context = createAppContext()
+      try {
+        const projectId = getString(options, 'project') as ProjectId
+        context.authz.require(principal(context, options), 'resource.read', {
+          type: 'project',
+          id: projectId,
+        })
+        const by = (getLocal(options, 'by') ?? 'agent') as 'agent' | 'task' | 'session' | 'purpose'
+        if (!['agent', 'task', 'session', 'purpose'].includes(by)) {
+          throw new OrchestratorError('BAD_REQUEST', 'by must be agent, task, session or purpose')
+        }
+        const rows = context.store.usageBreakdown(projectId, by)
+        if (options.json === true) print({ by, rows })
+        else {
+          process.stdout.write(`Uso por ${by}:\n`)
+          for (const row of rows) {
+            process.stdout.write(
+              `  ${row.key} [${row.source}] in=${row.inputTokens} out=${row.outputTokens} coste=${row.costUsd} USD cambios=${row.entries}\n`,
+            )
+          }
+          if (rows.length === 0) process.stdout.write('  Sin datos de uso.\n')
+        }
+      } finally {
+        context.close()
+      }
+    })
+
   addProject(addToken(program.command('usage:record')))
     .description('Importa uso exacto de tokens/coste reportado por el proveedor')
     .option('--provider <name>', 'proveedor')
@@ -415,6 +447,10 @@ export function registerPhase6Commands(program: Command): void {
     .option('--output <n>', 'tokens de salida')
     .option('--cost <usd>', 'coste exacto en USD')
     .option('--source <type>', 'provider | import | manual', 'import')
+    .option('--agent <id>', 'agent ID')
+    .option('--task <id>', 'task ID')
+    .option('--session <id>', 'session ID')
+    .option('--purpose <text>', 'proposito', 'provider-request')
     .option('--json', 'salida JSON')
     .action(async (options: CliOptions) => {
       const context = createAppContext()
@@ -433,6 +469,18 @@ export function registerPhase6Commands(program: Command): void {
           inputTokens: getNumber(options, 'input', 0),
           outputTokens: getNumber(options, 'output', 0),
           costUsd: getNumber(options, 'cost', 0),
+        })
+        context.store.createUsageEvent({
+          projectId,
+          ...(getLocal(options, 'agent') ? { agentId: getLocal(options, 'agent') as never } : {}),
+          ...(getLocal(options, 'task') ? { taskId: getLocal(options, 'task') as never } : {}),
+          ...(getLocal(options, 'session') ? { sessionId: getLocal(options, 'session')! } : {}),
+          purpose: getLocal(options, 'purpose') ?? 'provider-request',
+          source: 'provider',
+          inputTokens: record.inputTokens,
+          outputTokens: record.outputTokens,
+          costUsd: record.costUsd,
+          ...(record.requestId ? { requestId: record.requestId } : {}),
         })
         if (options.json === true) print(record)
         else {

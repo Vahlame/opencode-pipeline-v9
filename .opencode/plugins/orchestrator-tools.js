@@ -1,4 +1,7 @@
 import { define } from '@opencode/plugin'
+import { config as loadDotEnv } from 'dotenv'
+
+loadDotEnv({ quiet: true })
 
 const apiUrl = process.env.ORCH_TOOL_API_URL ?? 'http://127.0.0.1:4400'
 const toolSecret = process.env.ORCH_TOOL_SECRET ?? ''

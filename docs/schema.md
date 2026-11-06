@@ -5,10 +5,10 @@
 - Base por defecto: `.runtime/orchestrator.db` (ignorada por Git).
 - Migraciones: `migrations/001_initial.sql`, `002_phase3.sql`, `003_phase4.sql`,
   `004_phase5.sql`, `005_phase6.sql`, `006_phase7.sql` y
-  `007_provider_usage.sql`.
+  `007_provider_usage.sql` y `008_usage_events.sql`.
 - Runner: `src/persistence/database.ts`.
 - Tabla de control: `schema_migrations`.
-- Version actual del esquema: **7**.
+- Version actual del esquema: **8**.
 
 La conexion usa `node:sqlite`, `PRAGMA foreign_keys=ON`, WAL para archivos,
 `busy_timeout=5000` y transacciones `BEGIN IMMEDIATE` para escrituras.
@@ -53,6 +53,7 @@ La conexion usa `node:sqlite`, `PRAGMA foreign_keys=ON`, WAL para archivos,
 | `recovery_actions`      | Acciones de recuperacion           | PK `id`; FK run; codigo, entidad, estado y detalle                              |
 | `artifact_signatures`   | Firmas HMAC de manifiesto/entrega  | PK `id`; unico `(subject_type, subject_id)`; hash y firma                       |
 | `provider_usage`        | Uso exacto reportado por proveedor | PK `id`; FK proyecto; tokens, coste, request ID y fuente                        |
+| `usage_events`          | Uso por agente/tarea/sesion        | PK `id`; proyecto, agente, tarea, sesion, proposito, tokens y coste             |
 
 ## Relaciones principales
 

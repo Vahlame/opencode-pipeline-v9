@@ -2674,6 +2674,33 @@ export class SqliteStore {
     return this.getProjectResource(projectId)!
   }
 
+  recomputeProjectResources(
+    projectId: ProjectId,
+    inputCostPerMillion: number,
+    outputCostPerMillion: number,
+  ): ProjectResourceRecord {
+    const row = this.db.get<DbRow>(
+      `SELECT COALESCE(SUM(input_tokens), 0) AS input,
+              COALESCE(SUM(output_tokens), 0) AS output
+       FROM usage_events WHERE project_id = ?`,
+      [projectId],
+    )
+    const inputTokens = Number(row?.['input'] ?? 0)
+    const outputTokens = Number(row?.['output'] ?? 0)
+    const estimatedCostUsd =
+      (inputTokens / 1_000_000) * inputCostPerMillion +
+      (outputTokens / 1_000_000) * outputCostPerMillion
+    const project = this.getProject(projectId)
+    this.ensureProjectResource(projectId, project?.createdAt)
+    this.db.run(
+      `UPDATE project_resources
+       SET input_tokens = ?, output_tokens = ?, estimated_cost_usd = ?, updated_at = ?
+       WHERE project_id = ?`,
+      [inputTokens, outputTokens, estimatedCostUsd, nowIso(), projectId],
+    )
+    return this.getProjectResource(projectId)!
+  }
+
   recordProjectLimit(projectId: ProjectId, code: string): ProjectResourceRecord {
     const timestamp = nowIso()
     this.db.run(

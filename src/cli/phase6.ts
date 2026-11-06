@@ -489,7 +489,12 @@ export function registerPhase6Commands(program: Command): void {
               ...synced,
             })
           }
-          if (options.json === true) print({ projectId, results })
+          const resources = context.store.recomputeProjectResources(
+            projectId,
+            context.config.ORCH_INPUT_COST_PER_MILLION,
+            context.config.ORCH_OUTPUT_COST_PER_MILLION,
+          )
+          if (options.json === true) print({ projectId, results, resources })
           else {
             const recorded = results.reduce((sum, row) => sum + row.recorded, 0)
             process.stdout.write(`Uso exacto importado: ${recorded} mensajes nuevos\n`)
@@ -499,6 +504,9 @@ export function registerPhase6Commands(program: Command): void {
                 `  ${row.sessionId} [${row.purpose}] mensajes_con_uso=${row.exactMessages} nuevos=${row.recorded}\n`,
               )
             }
+            process.stdout.write(
+              `Proyecto: in=${resources.inputTokens} out=${resources.outputTokens} coste_estimado=${resources.estimatedCostUsd} USD\n`,
+            )
           }
         })
       } finally {

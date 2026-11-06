@@ -85,4 +85,39 @@ describe('usage accounting', () => {
       fixture.close()
     }
   })
+
+  it('recomputes project resources from the usage ledger', () => {
+    const fixture = createCoreFixture('C:/usage-recompute')
+    try {
+      const frontend = fixture.agentByCode.get('frontend')!
+      fixture.store.createUsageEvent({
+        projectId: fixture.project.id,
+        agentId: frontend.id,
+        purpose: 'task',
+        source: 'provider',
+        inputTokens: 10,
+        outputTokens: 20,
+        costUsd: 0.1,
+      })
+      fixture.store.createUsageEvent({
+        projectId: fixture.project.id,
+        agentId: frontend.id,
+        purpose: 'judge:JUDGE_TESTS',
+        source: 'estimate',
+        inputTokens: 5,
+        outputTokens: 5,
+        costUsd: 0.05,
+      })
+      fixture.store.recordProjectUsage(fixture.project.id, 999, 999, 9)
+      const resources = fixture.store.recomputeProjectResources(fixture.project.id, 0.15, 0.6)
+      expect(resources.inputTokens).toBe(15)
+      expect(resources.outputTokens).toBe(25)
+      expect(resources.estimatedCostUsd).toBeCloseTo(
+        (15 / 1_000_000) * 0.15 + (25 / 1_000_000) * 0.6,
+        10,
+      )
+    } finally {
+      fixture.close()
+    }
+  })
 })

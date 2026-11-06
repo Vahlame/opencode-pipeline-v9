@@ -1,6 +1,12 @@
 import { define } from '@opencode/plugin'
 import { config as loadDotEnv } from 'dotenv'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
+// El servidor de OpenCode puede arrancar con otro cwd. Carga primero el .env
+// del proyecto calculado desde este archivo y luego el del cwd como respaldo.
+const pluginDir = dirname(fileURLToPath(import.meta.url))
+loadDotEnv({ path: join(pluginDir, '..', '..', '.env'), quiet: true })
 loadDotEnv({ quiet: true })
 
 const apiUrl = process.env.ORCH_TOOL_API_URL ?? 'http://127.0.0.1:4400'

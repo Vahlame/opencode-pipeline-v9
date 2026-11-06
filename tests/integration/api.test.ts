@@ -119,6 +119,10 @@ describe('internal API', () => {
     expect(usage.status).toBe(200)
     expect((usage.body as { groups: unknown[] }).groups).toHaveLength(3)
 
+    const sessions = await request(`${base}/api/sessions?projectId=${project.id}`, humanToken)
+    expect(sessions.status).toBe(200)
+    expect(Array.isArray(sessions.body)).toBe(true)
+
     const integrations = await request(
       `${base}/api/integrations?projectId=${project.id}`,
       humanToken,

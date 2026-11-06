@@ -31,6 +31,20 @@ El SDK usa un directorio temporal y variables `XDG_*`/`OPENCODE_DB` aisladas por
 
 El mock implementa exactamente el mismo contrato, incluye los 11 perfiles y permite verificar creación de sesión, prompt, espera, transcripción y borrado sin consumir tokens.
 
+## Añadido en la Fase 2
+
+- `SqliteStore` con migraciones versionadas y transacciones.
+- `AuthorizationService` deny-by-default con identidad HMAC revalidada en DB.
+- `TokenService` para humanos y agentes.
+- `OrchestratorService` para proyectos, planes, tareas, módulos, contratos,
+  revisiones, aprobaciones, mensajes, checkpoints y estado compartido.
+- `OutboxDispatcher` con reintentos.
+- API HTTP local y CLI de operaciones.
+- Esquema documentado en `docs/schema.md`.
+
+La Fase 2 **no** entrega todavía sesiones OpenCode reales, worktrees, scheduler de
+ejecución ni entrega de mensajes a sesiones ocupadas.
+
 ## Límites de la Fase 1
 
 - No hay scheduler.

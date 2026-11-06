@@ -43,6 +43,7 @@ export const TaskStateSchema = z.enum([
   'APPROVED',
   'INTEGRATED',
   'BLOCKED',
+  'PAUSED',
   'FAILED',
   'CANCELLED',
 ])

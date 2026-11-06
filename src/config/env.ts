@@ -1,5 +1,5 @@
 import { existsSync, realpathSync } from 'node:fs'
-import { resolve } from 'node:path'
+import { isAbsolute, resolve } from 'node:path'
 import { config as loadDotEnv } from 'dotenv'
 import { z } from 'zod'
 
@@ -45,11 +45,19 @@ const EnvSchema = z.object({
     emptyToUndefined,
     z.string().min(1).default('Responde únicamente con la palabra OK, sin explicación.'),
   ),
+  ORCH_DB_PATH: z.preprocess(
+    emptyToUndefined,
+    z.string().min(1).default('.runtime/orchestrator.db'),
+  ),
+  ORCH_AUTH_SECRET: z.preprocess(emptyToUndefined, z.string().min(16).optional()),
+  ORCH_API_HOST: z.preprocess(emptyToUndefined, z.string().min(1).default('127.0.0.1')),
+  ORCH_API_PORT: z.coerce.number().int().min(0).max(65_535).default(4400),
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
 })
 
 export type AppConfig = z.infer<typeof EnvSchema> & {
   projectDir: string
+  dbPath: string
 }
 
 export class ConfigurationError extends Error {
@@ -71,9 +79,15 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   }
 
   const projectDir = resolve(parsed.data.OPENCODE_PROJECT_DIR)
+  const resolvedProjectDir = existsSync(projectDir) ? realpathSync.native(projectDir) : projectDir
+  const dbPath =
+    parsed.data.ORCH_DB_PATH === ':memory:' || isAbsolute(parsed.data.ORCH_DB_PATH)
+      ? parsed.data.ORCH_DB_PATH
+      : resolve(resolvedProjectDir, parsed.data.ORCH_DB_PATH)
   return {
     ...parsed.data,
-    projectDir: existsSync(projectDir) ? realpathSync.native(projectDir) : projectDir,
+    projectDir: resolvedProjectDir,
+    dbPath,
   }
 }
 

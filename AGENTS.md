@@ -2,17 +2,16 @@
 
 ## Contexto
 
-Este repositorio implementa la Fase 1 de **OpenCode Multiagent Orchestrator V9** sobre OpenCode V2. El objetivo es una base modular, tipada y verificable; el scheduler, el jurado, la integración y el feedback completos pertenecen a fases posteriores.
+Este repositorio implementa las fases 1 y 2 de **OpenCode Multiagent Orchestrator V9** sobre OpenCode V2. La Fase 1 aporta la base y la conexión real; la Fase 2 aporta SQLite, autorización, mensajería, eventos durables y outbox. El scheduler, los worktrees, el jurado, la integración y el feedback completos pertenecen a fases posteriores.
 
 ## Comandos de verificación
 
 Antes de declarar terminado un cambio:
 
 ```powershell
-npm run typecheck
-npm run lint
-npm test
+npm run check
 npm run build
+npm run db:migrate
 ```
 
 Para comprobar la conexión real con OpenCode V2:
@@ -29,12 +28,29 @@ No ejecutes `npm run test:real` en CI ni sin intención explícita: consume toke
 - `src/domain/`: tipos, esquemas Zod, IDs y transiciones.
 - `src/opencode/`: interfaz `OpenCodeAdapter`, runtime HTTP, SDK y mock.
 - `src/config/`: variables de entorno y validación.
-- `src/cli.ts`: comandos locales.
+- `src/cli.ts`, `src/cli/phase2.ts`: comandos locales.
+- `src/persistence/`: SQLite, migraciones y repositorios.
+- `src/auth/`: tokens HMAC y autorización.
+- `src/orchestrator/`: servicios de planes, tareas, mensajes y estado.
+- `src/api/`: API HTTP interna local.
+- `src/outbox/`: entrega de eventos con reintentos.
 - `.opencode/agents/`: perfiles V2 en Markdown.
 - `.opencode/skills/`: instrucciones compartidas.
-- `docs/`: decisiones y alcance.
+- `docs/`: decisiones, alcance y esquema.
 
 No importes `@opencode/client` ni `@opencode/sdk` fuera de `src/opencode/`. El resto del sistema debe depender de `OpenCodeAdapter`.
+
+## Persistencia y autorización
+
+- Toda mutación de estado debe generar evento y outbox en la misma transacción.
+- Usa `BEGIN IMMEDIATE`; no anides transacciones.
+- Los eventos y `audit_log` son append-only.
+- No confíes en roles declarados en prompts o mensajes; usa `AuthorizationService`.
+- Los mensajes son privados para su receptor; no los incluyas en el estado compartido.
+- No registres secretos en payloads, eventos, logs ni respuestas.
+- Los tokens se emiten con `auth:issue` solo desde el entorno administrativo; no
+  los incluyas en prompts ni repositorio.
+- `ORCH_AUTH_SECRET` es local y nunca debe versionarse.
 
 ## OpenCode V2
 

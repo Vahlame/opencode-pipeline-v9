@@ -173,7 +173,9 @@ export const MessageSchema = z.object({
   projectId: ProjectIdSchema,
   fromAgentId: AgentIdSchema,
   toAgentId: AgentIdSchema,
+  correlationId: NonEmptyStringSchema,
   kind: MessageKindSchema,
+  priority: z.number().int().min(0).max(100),
   state: MessageStateSchema,
   payload: JsonObjectSchema,
   requiresApproval: z.boolean(),
@@ -181,6 +183,7 @@ export const MessageSchema = z.object({
   idempotencyKey: NonEmptyStringSchema,
   createdAt: TimestampSchema,
   deliveredAt: TimestampSchema.optional(),
+  ackedAt: TimestampSchema.optional(),
 })
 export type Message = z.infer<typeof MessageSchema>
 

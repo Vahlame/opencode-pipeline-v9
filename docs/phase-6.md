@@ -260,7 +260,8 @@ cifras no reproducidas.
 - integraciones y manifiestos;
 - recuperacion con diagnostico y confirmacion;
 - entrega final con confirmacion humana;
-- recursos, mensajes y outbox.
+- recursos, mensajes y outbox;
+- tokens exactos por subagente, tarea y proposito.
 
 La GUI usa el mismo API y token humano; no crea una segunda fuente de verdad.
 
@@ -439,31 +440,33 @@ npm run doctor      -> fase 6, OpenCode V2.2.5, 13 perfiles
 
 ## Limitaciones conocidas
 
-- No hay GUI; toda la operacion es CLI/API local.
-- No hay plugin de herramientas de agente para consultar mensajes o memoria
-  compartida en vivo; el estado compartido se inyecta en el prompt de tarea.
+- La GUI local ya existe, pero no tiene TLS ni autenticacion de red. No exponerla
+  a Internet.
+- El plugin de herramientas ya existe; requiere reiniciar el servidor OpenCode y
+  `ORCH_TOOL_SECRET` en el entorno.
 - `npm run check` no se ejecuta dentro del workspace de integracion porque los
   worktrees no incluyen `node_modules` y los modulos aprobados inmutables no
   deben reformatearse sin nueva aprobacion. Se ejecuta en el repositorio.
-- La estimacion de tokens es aproximada; no sustituye la facturacion del
-  proveedor.
-- La outbox tiene eventos pendientes porque no se configuro un transporte
-  externo; los mensajes/eventos quedan durables y diagnosticables.
+- La contabilidad importa el usage exacto que reporta OpenCode por mensaje; si
+  un proveedor no lo reporta, se usa la estimacion local.
+- La outbox tiene transporte por archivo y webhook; falta endurecer
+  autenticacion, reintentos y garantia exactly-once.
 - Quedan tareas historicas: la tarea original del frontend superseded y la tarea
   dependiente PENDING. `diagnostics` las reporta; no se mutan en un proyecto
   COMPLETED por la guarda terminal.
 - El adaptador real por agente existe con `--agent-adapter`, pero la demo uso
   una especificacion explicita y el test automatizado cubre la ruta asistida.
 - No se declara listo para produccion: falta evaluacion de seguridad de red,
-  aislamiento de SO, presupuesto real y GUI de aprobacion.
+  aislamiento de SO y prueba en una VM Windows limpia.
 
-## Recomendaciones para V10
+## Pendientes actuales
 
-1. Panel GUI de aprobacion, feedback, recuperacion y entrega.
-2. Plugin de herramientas de OpenCode para memoria, mensajes y entrega.
-3. Servidor V2 dedicado con base, plugins y credenciales aisladas.
-4. Contabilidad exacta de tokens/coste por proveedor.
-5. Transporte real de outbox y between-session messaging.
-6. Sandbox de SO por worktree.
-7. Politica de retencion y firma de artefactos.
-8. Reconciliacion automatica de tareas historicas con aprobacion humana.
+1. Probar el instalador en una VM Windows completamente limpia.
+2. Sandbox de SO por worktree si se habilita shell o codigo no confiable.
+3. Servidor V2 dedicado y TLS si la GUI deja de ser local.
+4. Endurecer webhook, reintentos y autenticacion de eventos.
+5. Revision de seguridad y de las vulnerabilidades transitivas del SDK.
+6. Demo real del adaptador por agente con `--agent-adapter`.
+7. Sandbox de SO por worktree.
+8. Politica de retencion y firma de artefactos.
+9. Reconciliacion automatica de tareas historicas con aprobacion humana.

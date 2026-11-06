@@ -142,7 +142,8 @@ http://127.0.0.1:4400/ui
 ```
 
 La Control Room permite cargar un proyecto con token, aprobar plan, ver feedback,
-diagnosticar/aplicar recuperacion, consultar integraciones y finalizar entregas.
+diagnosticar/aplicar recuperacion, consultar integraciones, ver tokens exactos por
+subagente/tarea/proposito y finalizar entregas.
 
 Acceso directo creado en el escritorio:
 
@@ -259,18 +260,22 @@ commits se conservaron. Los detalles estan en `docs/phase-6.md`.
 
 ## Limitaciones
 
-- La GUI avanzada queda fuera del alcance; se usa CLI/API.
-- No hay plugin de herramientas de agente; el estado compartido se inyecta en el
-  prompt.
+- La GUI es local y no tiene TLS ni autenticacion de red; no exponerla a Internet.
+- El plugin de OpenCode requiere reiniciar el servidor y `ORCH_TOOL_SECRET`.
 - `npm run check` no se ejecuta dentro del workspace de integracion porque no
   incluye `node_modules` y los modulos aprobados inmutables no deben reformatearse
   sin nueva aprobacion.
-- La estimacion de tokens/coste es aproximada.
-- La outbox no tiene transporte externo configurado; los eventos quedan durables.
-- No se declara listo para produccion sin evaluacion de seguridad, sandbox de SO,
-  presupuesto real y GUI.
+- La contabilidad toma el usage que reporta OpenCode por mensaje; si un proveedor
+  no lo reporta, se usa estimacion local.
+- La outbox tiene transporte por archivo y webhook, pero no autenticacion de
+  webhook ni garantia de entrega exactly-once.
+- No se declara listo para produccion sin evaluacion de seguridad, sandbox de SO
+  y prueba en una VM Windows limpia.
 
-## Futuro V10
+## Pendientes para produccion
 
-Panel GUI, plugin de herramientas, servidor dedicado, contabilidad exacta de
-tokens/coste, transporte de outbox, sandbox por worktree y firma de artefactos.
+1. Probar el instalador en una VM Windows completamente limpia.
+2. Sandbox de SO por worktree si se habilita shell o codigo no confiable.
+3. Servidor V2 dedicado y TLS si la GUI deja de ser local.
+4. Endurecer webhook, reintentos y autenticacion de eventos.
+5. Revision de seguridad y de las vulnerabilidades transitivas del SDK.

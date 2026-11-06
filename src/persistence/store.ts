@@ -270,6 +270,66 @@ function toCheckpoint(row: DbRow): Checkpoint {
   }
 }
 
+function toSessionRecord(row: DbRow): SessionRecord {
+  return {
+    id: text(row, 'id'),
+    projectId: text(row, 'project_id') as ProjectId,
+    agentId: text(row, 'agent_id') as AgentId,
+    ...(optionalText(row, 'opencode_session_id')
+      ? { opencodeSessionId: optionalText(row, 'opencode_session_id') }
+      : {}),
+    ...(optionalText(row, 'worktree_path')
+      ? { worktreePath: optionalText(row, 'worktree_path') }
+      : {}),
+    status: text(row, 'status') as SessionRecord['status'],
+    ...(optionalText(row, 'last_event_seq')
+      ? { lastEventSeq: Number(optionalText(row, 'last_event_seq')) }
+      : {}),
+    createdAt: text(row, 'created_at'),
+    updatedAt: text(row, 'updated_at'),
+  }
+}
+
+function toLease(row: DbRow): LeaseRecord {
+  return {
+    taskId: text(row, 'task_id') as TaskId,
+    ownerId: text(row, 'owner_id'),
+    attempt: integer(row, 'attempt'),
+    expiresAt: text(row, 'expires_at'),
+    heartbeatAt: text(row, 'heartbeat_at'),
+    createdAt: text(row, 'created_at'),
+  }
+}
+
+function toWorktree(row: DbRow): WorktreeRecord {
+  return {
+    id: text(row, 'id'),
+    taskId: text(row, 'task_id') as TaskId,
+    ...(optionalText(row, 'module_id')
+      ? { moduleId: optionalText(row, 'module_id') as ModuleId }
+      : {}),
+    path: text(row, 'path'),
+    branch: text(row, 'branch'),
+    baseCommit: text(row, 'base_commit'),
+    status: text(row, 'status') as WorktreeRecord['status'],
+    createdAt: text(row, 'created_at'),
+    updatedAt: text(row, 'updated_at'),
+  }
+}
+
+function toTaskAttempt(row: DbRow): TaskAttemptRecord {
+  return {
+    id: text(row, 'id'),
+    taskId: text(row, 'task_id') as TaskId,
+    attempt: integer(row, 'attempt'),
+    status: text(row, 'status') as TaskAttemptRecord['status'],
+    ...(optionalText(row, 'session_id') ? { sessionId: optionalText(row, 'session_id') } : {}),
+    startedAt: text(row, 'started_at'),
+    ...(optionalText(row, 'ended_at') ? { endedAt: optionalText(row, 'ended_at') } : {}),
+    ...(optionalText(row, 'error') ? { error: optionalText(row, 'error') } : {}),
+  }
+}
+
 function toAuditEntry(row: DbRow): AuditEntry {
   return {
     id: text(row, 'id') as AuditId,
@@ -417,6 +477,50 @@ export interface TemporaryPermissionRecord {
   readonly effect: 'allow' | 'deny'
   readonly expiresAt: string
   readonly grantedBy: string
+}
+
+export interface SessionRecord {
+  readonly id: string
+  readonly projectId: ProjectId
+  readonly agentId: AgentId
+  readonly opencodeSessionId?: string
+  readonly worktreePath?: string
+  readonly status: 'STARTING' | 'ACTIVE' | 'IDLE' | 'STOPPED' | 'FAILED'
+  readonly lastEventSeq?: number
+  readonly createdAt: string
+  readonly updatedAt: string
+}
+
+export interface LeaseRecord {
+  readonly taskId: TaskId
+  readonly ownerId: string
+  readonly attempt: number
+  readonly expiresAt: string
+  readonly heartbeatAt: string
+  readonly createdAt: string
+}
+
+export interface WorktreeRecord {
+  readonly id: string
+  readonly taskId: TaskId
+  readonly moduleId?: ModuleId
+  readonly path: string
+  readonly branch: string
+  readonly baseCommit: string
+  readonly status: 'ACTIVE' | 'COMMITTED' | 'FAILED' | 'REMOVED'
+  readonly createdAt: string
+  readonly updatedAt: string
+}
+
+export interface TaskAttemptRecord {
+  readonly id: string
+  readonly taskId: TaskId
+  readonly attempt: number
+  readonly status: 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'INTERRUPTED'
+  readonly sessionId?: string
+  readonly startedAt: string
+  readonly endedAt?: string
+  readonly error?: string
 }
 
 export class StoreConflictError extends Error {
@@ -670,6 +774,234 @@ export class SqliteStore {
         projectId,
       ])
       .map(toTask)
+  }
+
+  incrementTaskAttempt(id: TaskId): Task {
+    const result = this.db.run(
+      'UPDATE tasks SET attempt_count = attempt_count + 1, updated_at = ?, version = version + 1 WHERE id = ?',
+      [nowIso(), id],
+    )
+    if (result.changes === 0) throw new StoreConflictError(`Task ${id} not found`)
+    return this.getTask(id)!
+  }
+
+  createSession(record: {
+    readonly projectId: ProjectId
+    readonly agentId: AgentId
+    readonly opencodeSessionId?: string
+    readonly worktreePath?: string
+    readonly status?: SessionRecord['status']
+  }): SessionRecord {
+    const id = createId('ses')
+    const timestamp = nowIso()
+    this.db.run(
+      `INSERT INTO sessions
+        (id, project_id, agent_id, opencode_session_id, worktree_path, status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        record.projectId,
+        record.agentId,
+        record.opencodeSessionId ?? null,
+        record.worktreePath ?? null,
+        record.status ?? 'STARTING',
+        timestamp,
+        timestamp,
+      ],
+    )
+    return this.getSession(id)!
+  }
+
+  getSession(id: string): SessionRecord | undefined {
+    const row = this.db.get<DbRow>('SELECT * FROM sessions WHERE id = ?', [id])
+    return row ? toSessionRecord(row) : undefined
+  }
+
+  getSessionByOpenCodeId(opencodeSessionId: string): SessionRecord | undefined {
+    const row = this.db.get<DbRow>('SELECT * FROM sessions WHERE opencode_session_id = ?', [
+      opencodeSessionId,
+    ])
+    return row ? toSessionRecord(row) : undefined
+  }
+
+  listSessions(projectId: ProjectId): SessionRecord[] {
+    return this.db
+      .all<DbRow>('SELECT * FROM sessions WHERE project_id = ? ORDER BY created_at DESC', [
+        projectId,
+      ])
+      .map(toSessionRecord)
+  }
+
+  updateSessionStatus(
+    id: string,
+    status: SessionRecord['status'],
+    lastEventSeq?: number,
+  ): SessionRecord {
+    const result = this.db.run(
+      `UPDATE sessions
+       SET status = ?, last_event_seq = COALESCE(?, last_event_seq), updated_at = ?
+       WHERE id = ?`,
+      [status, lastEventSeq ?? null, nowIso(), id],
+    )
+    if (result.changes === 0) throw new StoreConflictError(`Session ${id} not found`)
+    return this.getSession(id)!
+  }
+
+  createLease(record: {
+    readonly taskId: TaskId
+    readonly ownerId: string
+    readonly attempt: number
+    readonly expiresAt: string
+  }): LeaseRecord {
+    const timestamp = nowIso()
+    this.db.run(
+      `INSERT INTO leases (task_id, owner_id, attempt, expires_at, heartbeat_at, created_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [record.taskId, record.ownerId, record.attempt, record.expiresAt, timestamp, timestamp],
+    )
+    return this.getLease(record.taskId)!
+  }
+
+  getLease(taskId: TaskId): LeaseRecord | undefined {
+    const row = this.db.get<DbRow>('SELECT * FROM leases WHERE task_id = ?', [taskId])
+    return row ? toLease(row) : undefined
+  }
+
+  renewLease(taskId: TaskId, expiresAt: string): LeaseRecord {
+    const result = this.db.run(
+      'UPDATE leases SET expires_at = ?, heartbeat_at = ? WHERE task_id = ?',
+      [expiresAt, nowIso(), taskId],
+    )
+    if (result.changes === 0) throw new StoreConflictError(`Lease for ${taskId} not found`)
+    return this.getLease(taskId)!
+  }
+
+  deleteLease(taskId: TaskId): void {
+    this.db.run('DELETE FROM leases WHERE task_id = ?', [taskId])
+  }
+
+  listActiveLeases(): LeaseRecord[] {
+    return this.db
+      .all<DbRow>('SELECT * FROM leases WHERE expires_at > ? ORDER BY created_at', [nowIso()])
+      .map(toLease)
+  }
+
+  listExpiredLeases(): LeaseRecord[] {
+    return this.db
+      .all<DbRow>('SELECT * FROM leases WHERE expires_at <= ? ORDER BY created_at', [nowIso()])
+      .map(toLease)
+  }
+
+  createWorktree(record: {
+    readonly taskId: TaskId
+    readonly moduleId?: ModuleId
+    readonly path: string
+    readonly branch: string
+    readonly baseCommit: string
+    readonly status?: WorktreeRecord['status']
+  }): WorktreeRecord {
+    const id = createId('wtr')
+    const timestamp = nowIso()
+    this.db.run(
+      `INSERT INTO worktrees
+        (id, task_id, module_id, path, branch, base_commit, status, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        record.taskId,
+        record.moduleId ?? null,
+        record.path,
+        record.branch,
+        record.baseCommit,
+        record.status ?? 'ACTIVE',
+        timestamp,
+        timestamp,
+      ],
+    )
+    return this.getWorktreeByTask(record.taskId)!
+  }
+
+  getWorktreeByTask(taskId: TaskId): WorktreeRecord | undefined {
+    const row = this.db.get<DbRow>('SELECT * FROM worktrees WHERE task_id = ?', [taskId])
+    return row ? toWorktree(row) : undefined
+  }
+
+  listWorktrees(projectId: ProjectId): WorktreeRecord[] {
+    return this.db
+      .all<DbRow>(
+        `SELECT w.* FROM worktrees w
+         JOIN tasks t ON t.id = w.task_id
+         WHERE t.project_id = ?
+         ORDER BY w.created_at DESC`,
+        [projectId],
+      )
+      .map(toWorktree)
+  }
+
+  updateWorktreeStatus(id: string, status: WorktreeRecord['status']): WorktreeRecord {
+    const result = this.db.run('UPDATE worktrees SET status = ?, updated_at = ? WHERE id = ?', [
+      status,
+      nowIso(),
+      id,
+    ])
+    if (result.changes === 0) throw new StoreConflictError(`Worktree ${id} not found`)
+    const row = this.db.get<DbRow>('SELECT * FROM worktrees WHERE id = ?', [id])
+    return toWorktree(row!)
+  }
+
+  createTaskAttempt(record: {
+    readonly taskId: TaskId
+    readonly attempt: number
+    readonly sessionId?: string
+    readonly status?: TaskAttemptRecord['status']
+  }): TaskAttemptRecord {
+    const id = createId('att')
+    this.db.run(
+      `INSERT INTO task_attempts
+        (id, task_id, attempt, status, session_id, started_at)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        record.taskId,
+        record.attempt,
+        record.status ?? 'RUNNING',
+        record.sessionId ?? null,
+        nowIso(),
+      ],
+    )
+    return this.getTaskAttempt(id)!
+  }
+
+  getTaskAttempt(id: string): TaskAttemptRecord | undefined {
+    const row = this.db.get<DbRow>('SELECT * FROM task_attempts WHERE id = ?', [id])
+    return row ? toTaskAttempt(row) : undefined
+  }
+
+  updateTaskAttempt(
+    id: string,
+    status: TaskAttemptRecord['status'],
+    options: { sessionId?: string; error?: string } = {},
+  ): TaskAttemptRecord {
+    const result = this.db.run(
+      `UPDATE task_attempts
+       SET status = ?, session_id = COALESCE(?, session_id), ended_at = ?, error = ?
+       WHERE id = ?`,
+      [
+        status,
+        options.sessionId ?? null,
+        status === 'RUNNING' ? null : nowIso(),
+        options.error ? redactText(options.error).slice(0, 1000) : null,
+        id,
+      ],
+    )
+    if (result.changes === 0) throw new StoreConflictError(`Task attempt ${id} not found`)
+    return this.getTaskAttempt(id)!
+  }
+
+  listTaskAttempts(taskId: TaskId): TaskAttemptRecord[] {
+    return this.db
+      .all<DbRow>('SELECT * FROM task_attempts WHERE task_id = ? ORDER BY attempt', [taskId])
+      .map(toTaskAttempt)
   }
 
   updateTaskState(id: TaskId, state: Task['state'], expectedVersion?: number): Task {

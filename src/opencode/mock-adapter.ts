@@ -167,6 +167,13 @@ export class MockOpenCodeAdapter implements OpenCodeAdapter {
     return [...session.messages]
   }
 
+  async interruptSession(sessionID: string): Promise<void> {
+    this.calls.push({ method: 'interruptSession', input: { sessionID } })
+    if (!this.sessions.has(sessionID)) {
+      throw new OpenCodeAdapterError('SESSION_NOT_FOUND', `No existe la sesión ${sessionID}`)
+    }
+  }
+
   async deleteSession(sessionID: string): Promise<void> {
     this.calls.push({ method: 'deleteSession', input: { sessionID } })
     this.sessions.delete(sessionID)

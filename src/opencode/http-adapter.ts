@@ -43,6 +43,7 @@ function toSessionView(info: SessionInfo): SessionView {
     ...(info.model ? { model: toModelReference(info.model) } : {}),
     directory: info.location.directory,
     ...(info.title ? { title: info.title } : {}),
+    ...(info.outcome ? { outcome: info.outcome } : {}),
     createdAt: new Date(info.time.created).toISOString(),
   }
 }
@@ -238,6 +239,10 @@ export class HttpOpenCodeAdapter implements OpenCodeAdapter {
     return messages
       .map(toTranscriptMessage)
       .filter((message): message is TranscriptMessage => message !== null)
+  }
+
+  async interruptSession(sessionID: string): Promise<void> {
+    await this.client.session.interrupt({ sessionID, resume: false })
   }
 
   async deleteSession(sessionID: string): Promise<void> {

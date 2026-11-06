@@ -6,13 +6,15 @@ Este repositorio contiene el núcleo de un orquestador multiagente sobre **OpenC
 
 - Fase 1: base, adaptador, perfiles y smoke real con OpenCode.
 - Fase 2: SQLite, migraciones, autorización, mensajes, eventos/outbox, API y CLI.
+- Fase 3: scheduler DAG, worktrees Git, sesiones reales, ejecución paralela, leases y commits.
 - Runtime interactivo: `HttpOpenCodeAdapter` contra un servidor OpenCode V2.
 - Runtime CI/headless: `SdkOpenCodeAdapter` con host embebido y datos aislados.
 - Runtime de pruebas: `MockOpenCodeAdapter`.
 - Dominio tipado con Zod y transiciones centralizadas.
 - Perfiles V2 en `.opencode/agents/` y habilidades en `.opencode/skills/`.
 - Persistencia local en `.runtime/orchestrator.db`.
-- Sin scheduler de ejecución, worktrees, jurado ni integración final todavía.
+- Worktrees en `.worktrees/` y evidencia en `sessions`, `worktrees` y `task_attempts`.
+- Sin jurado, integración final ni feedback todavía.
 
 ## Requisitos
 
@@ -58,6 +60,7 @@ npm run test:real
 npm run test:sdk
 npm run serve
 .\scripts\phase2-demo.ps1
+.\scripts\phase3-demo.ps1 -Reset
 ```
 
 ### `doctor`
@@ -136,6 +139,21 @@ npx tsx src/cli.ts rejected --project <id> --token $HUMAN
 
 La demo completa y reproducible está en `scripts/phase2-demo.ps1`.
 
+### Fase 3: ejecución real
+
+```powershell
+npx tsx src/cli.ts scheduler:run --project <id> --token $HUMAN
+npx tsx src/cli.ts sessions:list --project <id> --token $HUMAN
+npx tsx src/cli.ts worktrees:list --project <id> --token $HUMAN
+npx tsx src/cli.ts attempts:list --project <id> --token $HUMAN
+```
+
+La demo completa está en `scripts/phase3-demo.ps1` y crea dos worktrees
+independientes, dos sesiones OpenCode, dos commits y una tarea dependiente que
+permanece bloqueada. Por defecto usa el servidor V2 de la app y el modelo
+`opencode/deepseek-v4.1-flash-free` como fallback; configura
+`ORCH_AGENT_MODEL` para otro modelo con `capabilities.tools=true`.
+
 ### API interna
 
 ```powershell
@@ -196,13 +214,14 @@ permite edición, shell y skills sin debilitar los perfiles del orquestador.
 - `docs/architecture.md`: decisiones y límites.
 - `docs/phase-1.md`: alcance y verificaciones de la Fase 1.
 - `docs/phase-2.md`: alcance, resultados, pruebas y pendientes de la Fase 2.
+- `docs/phase-3.md`: scheduler, worktrees, ejecución real y evidencias.
 - `docs/schema.md`: esquema SQLite, relaciones e invariantes.
 - `docs/opencode-v2.md`: notas de integración V2.
 - `AGENTS.md`: instrucciones persistentes para agentes.
 
 ## Próximas fases
 
-La Fase 3 incorporará worktrees aislados, sesiones OpenCode reales, plugin de
-herramientas ligado al `sessionID`, scheduler con leases, ejecución paralela y
-entrega controlada de mensajes a sesiones. No se avanza automáticamente sin
-completar y verificar cada fase.
+La Fase 4 incorporará el jurado independiente, consolidación determinista,
+rework localizado, integración de módulos aprobados y feedback global. La Fase 3
+deja los entregables en `IN_REVIEW`; no se avanza automáticamente sin verificar
+la fase.

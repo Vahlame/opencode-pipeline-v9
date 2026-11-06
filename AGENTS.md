@@ -2,7 +2,7 @@
 
 ## Contexto
 
-Este repositorio implementa las fases 1 y 2 de **OpenCode Multiagent Orchestrator V9** sobre OpenCode V2. La Fase 1 aporta la base y la conexión real; la Fase 2 aporta SQLite, autorización, mensajería, eventos durables y outbox. El scheduler, los worktrees, el jurado, la integración y el feedback completos pertenecen a fases posteriores.
+Este repositorio implementa las fases 1, 2 y 3 de **OpenCode Multiagent Orchestrator V9** sobre OpenCode V2. La Fase 1 aporta la base y la conexión real; la Fase 2 aporta SQLite, autorización, mensajería, eventos durables y outbox; la Fase 3 aporta scheduler DAG, worktrees Git, sesiones reales, ejecución paralela y leases. El jurado, la integración y el feedback completos pertenecen a fases posteriores.
 
 ## Comandos de verificación
 
@@ -34,6 +34,10 @@ No ejecutes `npm run test:real` en CI ni sin intención explícita: consume toke
 - `src/orchestrator/`: servicios de planes, tareas, mensajes y estado.
 - `src/api/`: API HTTP interna local.
 - `src/outbox/`: entrega de eventos con reintentos.
+- `src/worktrees/`: aislamiento Git, validación de rutas y commits.
+- `src/sessions/`: sesiones OpenCode, prompts, espera e interrupción.
+- `src/orchestrator/scheduler.ts`, `task-executor.ts`: DAG, leases y ejecución real.
+- `.worktrees/`: worktrees de demostración, ignorados por Git.
 - `.opencode/agents/`: perfiles V2 en Markdown.
 - `.opencode/skills/`: instrucciones compartidas.
 - `docs/`: decisiones, alcance y esquema.
@@ -51,6 +55,11 @@ No importes `@opencode/client` ni `@opencode/sdk` fuera de `src/opencode/`. El r
 - Los tokens se emiten con `auth:issue` solo desde el entorno administrativo; no
   los incluyas en prompts ni repositorio.
 - `ORCH_AUTH_SECRET` es local y nunca debe versionarse.
+- Los agentes no tienen shell; los tests y commits los ejecuta el orquestador.
+- Un worktree por tarea; nunca compartas un directorio de escritura.
+- El scheduler solo ejecuta con plan aprobado y proyecto `RUNNING`.
+- `ORCH_AGENT_MODEL` debe tener `capabilities.tools=true`.
+- No borres worktrees sucios sin autorización humana.
 
 ## OpenCode V2
 

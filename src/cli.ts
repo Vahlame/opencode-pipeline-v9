@@ -9,6 +9,7 @@ import { createOpenCodeAdapter } from './opencode/factory.js'
 import { runOpenCodeSmoke } from './opencode/smoke.js'
 import type { OpenCodeAdapter } from './opencode/adapter.js'
 import { registerPhase2Commands } from './cli/phase2.js'
+import { registerPhase3Commands } from './cli/phase3.js'
 import { SqliteStore } from './persistence/store.js'
 
 loadDotEnv({ quiet: true })
@@ -71,6 +72,9 @@ async function runDoctor(config: AppConfig): Promise<void> {
     events: store.countTable('events'),
     audit: store.countTable('audit_log'),
     outbox: store.countTable('event_outbox'),
+    sessions: store.countTable('sessions'),
+    worktrees: store.countTable('worktrees'),
+    attempts: store.countTable('task_attempts'),
   }
   store.close()
 
@@ -78,7 +82,7 @@ async function runDoctor(config: AppConfig): Promise<void> {
     const health = await adapter.health()
     const agents = health.ok ? await adapter.listAgents({ directory: config.projectDir }) : []
     const report = {
-      phase: 2,
+      phase: 3,
       node: process.version,
       authSecretConfigured: Boolean(config.ORCH_AUTH_SECRET),
       db,
@@ -160,7 +164,7 @@ const program = new Command()
 program
   .name('orch')
   .description('OpenCode Multiagent Orchestrator V9 - Fase 2 (núcleo persistente)')
-  .version('0.2.0')
+  .version('0.3.0')
 
 program
   .command('doctor')
@@ -190,6 +194,7 @@ program
   })
 
 registerPhase2Commands(program)
+registerPhase3Commands(program)
 
 program.parseAsync(process.argv).catch((error: unknown) => {
   const message = error instanceof Error ? error.message : String(error)

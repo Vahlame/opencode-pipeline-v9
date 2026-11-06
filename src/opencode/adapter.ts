@@ -38,6 +38,7 @@ export interface SessionView {
   readonly directory: string
   readonly title?: string
   readonly createdAt?: string
+  readonly outcome?: 'succeeded' | 'failed' | 'interrupted'
 }
 
 export interface CreateSessionInput {
@@ -99,6 +100,8 @@ export interface OpenCodeAdapter {
   waitForIdle(sessionID: string, timeoutMs?: number): Promise<void>
 
   getTranscript(sessionID: string): Promise<readonly TranscriptMessage[]>
+
+  interruptSession(sessionID: string): Promise<void>
 
   deleteSession(sessionID: string): Promise<void>
 

@@ -3,10 +3,10 @@
 ## Ubicación y migraciones
 
 - Base por defecto: `.runtime/orchestrator.db` (ignorada por Git).
-- Migraciones: `migrations/001_initial.sql`.
+- Migraciones: `migrations/001_initial.sql`, `migrations/002_phase3.sql`.
 - Runner: `src/persistence/database.ts`.
 - Tabla de control: `schema_migrations`.
-- Versión actual del esquema: **1**.
+- Versión actual del esquema: **2** (Fase 3 añade `leases`, `worktrees` y `task_attempts`).
 
 La conexión usa `node:sqlite`, `PRAGMA foreign_keys=ON`, WAL para archivos,
 `busy_timeout=5000` y transacciones `BEGIN IMMEDIATE` para escrituras.
@@ -32,6 +32,9 @@ La conexión usa `node:sqlite`, `PRAGMA foreign_keys=ON`, WAL para archivos,
 | `checkpoints`           | Recuperación de estado             | PK `id`; FK proyecto; scope/hash                                                |
 | `audit_log`             | Decisiones de autorización         | PK `id`; project opcional; triggers bloquean UPDATE/DELETE                      |
 | `temporary_permissions` | Grants temporales                  | PK `id`; FK proyecto; efecto allow/deny; expiración/revocación                  |
+| `leases`                | Lease activo por tarea             | PK `task_id`; intento, expiración y heartbeat                                   |
+| `worktrees`             | Worktree Git de una tarea          | PK `id`; FK tarea/módulo; path y branch únicos; estado                          |
+| `task_attempts`         | Intentos de ejecución              | PK `id`; FK tarea/sesión; único `(task_id, attempt)`; tiempos y error           |
 
 ## Relaciones principales
 
@@ -49,7 +52,10 @@ projects
   ├── events ── event_outbox
   ├── checkpoints
   ├── audit_log
-  └── temporary_permissions
+  ├── temporary_permissions
+  ├── leases
+  ├── worktrees ── module_versions ── reviews
+  └── task_attempts ── sessions
 ```
 
 ## Invariantes

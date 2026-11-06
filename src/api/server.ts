@@ -155,6 +155,28 @@ export async function startApiServer(
         sendJson(response, 200, context.service.listMessages(principal, requireProject(projectId)))
         return
       }
+      if (method === 'GET' && path === '/api/sessions') {
+        const id = requireProject(projectId)
+        context.authz.require(principal, 'state.read', { type: 'project', id })
+        sendJson(response, 200, context.store.listSessions(id))
+        return
+      }
+      if (method === 'GET' && path === '/api/worktrees') {
+        const id = requireProject(projectId)
+        context.authz.require(principal, 'state.read', { type: 'project', id })
+        sendJson(response, 200, context.store.listWorktrees(id))
+        return
+      }
+      if (method === 'GET' && path === '/api/attempts') {
+        const id = requireProject(projectId)
+        context.authz.require(principal, 'state.read', { type: 'project', id })
+        sendJson(
+          response,
+          200,
+          context.store.listTasks(id).flatMap((task) => context.store.listTaskAttempts(task.id)),
+        )
+        return
+      }
       if (method === 'GET' && path === '/api/audit') {
         sendJson(response, 200, context.service.listAudit(principal, requireProject(projectId)))
         return

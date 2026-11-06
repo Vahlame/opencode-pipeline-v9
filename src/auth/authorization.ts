@@ -57,6 +57,7 @@ export type Action =
   | 'module.version.read'
   | 'session.read'
   | 'session.create'
+  | 'session.interrupt'
   | 'message.send'
   | 'message.read'
   | 'message.ack'
@@ -158,6 +159,7 @@ const COORDINATOR_ACTIONS = new Set<Action>([
   'contract.approve',
   'module.create',
   'checkpoint.write',
+  'session.interrupt',
   'temporary_permission.grant',
 ])
 
@@ -176,6 +178,7 @@ const HUMAN_ACTIONS = new Set<Action>([
   'task.cancel',
   'contract.approve',
   'checkpoint.write',
+  'session.interrupt',
   'temporary_permission.grant',
 ])
 
@@ -539,6 +542,10 @@ export class AuthorizationService {
       case 'review': {
         const review = resource.id ? this.store.getReview(resource.id as ReviewId) : undefined
         return review ? { projectId: review.projectId, review } : undefined
+      }
+      case 'session': {
+        const session = resource.id ? this.store.getSession(resource.id) : undefined
+        return session ? { projectId: session.projectId } : undefined
       }
       default:
         return resource.projectId ? { projectId: resource.projectId } : undefined

@@ -1,6 +1,6 @@
 {
   "name": "opencode-multiagent-orchestrator-v9",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
   "description": "Orquestador multiagente sobre OpenCode V2",

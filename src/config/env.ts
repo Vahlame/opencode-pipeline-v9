@@ -52,12 +52,21 @@ const EnvSchema = z.object({
   ORCH_AUTH_SECRET: z.preprocess(emptyToUndefined, z.string().min(16).optional()),
   ORCH_API_HOST: z.preprocess(emptyToUndefined, z.string().min(1).default('127.0.0.1')),
   ORCH_API_PORT: z.coerce.number().int().min(0).max(65_535).default(4400),
+  ORCH_MAX_PARALLEL: z.coerce.number().int().min(1).max(16).default(2),
+  ORCH_LEASE_SECONDS: z.coerce.number().int().min(10).max(3600).default(60),
+  ORCH_HEARTBEAT_SECONDS: z.coerce.number().int().min(2).max(1800).default(15),
+  ORCH_SESSION_TIMEOUT_MS: z.coerce.number().int().min(10_000).max(3_600_000).default(300_000),
+  ORCH_TASK_MAX_ATTEMPTS: z.coerce.number().int().min(1).max(10).default(3),
+  ORCH_WORKTREE_ROOT: z.preprocess(emptyToUndefined, z.string().min(1).default('.worktrees')),
+  ORCH_AGENT_MODEL: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+  ORCH_GIT_BASE_REF: z.preprocess(emptyToUndefined, z.string().min(1).default('HEAD')),
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
 })
 
 export type AppConfig = z.infer<typeof EnvSchema> & {
   projectDir: string
   dbPath: string
+  worktreeRoot: string
 }
 
 export class ConfigurationError extends Error {
@@ -84,10 +93,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
     parsed.data.ORCH_DB_PATH === ':memory:' || isAbsolute(parsed.data.ORCH_DB_PATH)
       ? parsed.data.ORCH_DB_PATH
       : resolve(resolvedProjectDir, parsed.data.ORCH_DB_PATH)
+  const worktreeRoot = isAbsolute(parsed.data.ORCH_WORKTREE_ROOT)
+    ? parsed.data.ORCH_WORKTREE_ROOT
+    : resolve(resolvedProjectDir, parsed.data.ORCH_WORKTREE_ROOT)
   return {
     ...parsed.data,
     projectDir: resolvedProjectDir,
     dbPath,
+    worktreeRoot,
   }
 }
 

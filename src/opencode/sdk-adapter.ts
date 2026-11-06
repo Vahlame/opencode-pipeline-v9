@@ -51,6 +51,7 @@ function toSessionView(info: SessionInfo): SessionView {
     ...(info.model ? { model: toModelReference(info.model) } : {}),
     directory: info.location.directory,
     ...(info.title ? { title: info.title } : {}),
+    ...(info.outcome ? { outcome: info.outcome } : {}),
     createdAt: new Date(info.time.created).toISOString(),
   }
 }
@@ -242,6 +243,10 @@ export class SdkOpenCodeAdapter implements OpenCodeAdapter {
     return messages
       .map((message) => toTranscriptMessage(message))
       .filter((message): message is TranscriptMessage => message !== null)
+  }
+
+  async interruptSession(sessionID: string): Promise<void> {
+    await this.host.sessions.interrupt({ sessionID, resume: false })
   }
 
   async deleteSession(sessionID: string): Promise<void> {

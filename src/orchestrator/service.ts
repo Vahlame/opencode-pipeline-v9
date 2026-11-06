@@ -32,7 +32,7 @@ import {
 } from '../domain/transitions.js'
 import type { AuthorizationService } from '../auth/authorization.js'
 import type { Principal } from '../auth/types.js'
-import type { SqliteStore } from '../persistence/store.js'
+import type { ProjectResourceRecord, SqliteStore } from '../persistence/store.js'
 import { sha256 } from '../security/hash.js'
 import { redact } from '../security/redaction.js'
 import { ConflictError, NotFoundError, OrchestratorError, ValidationError } from './errors.js'
@@ -119,6 +119,7 @@ export interface StateView {
   readonly approvals: readonly Approval[]
   readonly events: readonly Event[]
   readonly blockers: readonly string[]
+  readonly resources: ProjectResourceRecord | null
   readonly generatedAt: string
 }
 
@@ -167,9 +168,7 @@ export class OrchestratorService {
     if (!name || !repoPath) throw new ValidationError('name and repoPath are required')
 
     const existing = this.store.getProjectByRepo(repoPath)
-    if (existing) {
-      if (existing.name !== name)
-        throw new ConflictError('repoPath already belongs to another project')
+    if (existing && existing.name === name) {
       return existing
     }
 
@@ -890,6 +889,7 @@ export class OrchestratorService {
           (task) => task.state === 'BLOCKED' || task.state === 'FAILED' || task.state === 'PAUSED',
         )
         .map((task) => `${task.id}:${task.state}`),
+      resources: this.store.getProjectResource(projectId) ?? null,
       generatedAt: nowIso(),
     }
     return redact(state)

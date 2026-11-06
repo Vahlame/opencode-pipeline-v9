@@ -8,7 +8,7 @@ describe('SQLite persistence', () => {
   it('applies migrations and creates the required tables', () => {
     const store = SqliteStore.open(':memory:')
     try {
-      expect(store.schemaVersion).toBe(8)
+      expect(store.schemaVersion).toBe(9)
       const tables = store.db
         .all<{ name: string }>("SELECT name FROM sqlite_master WHERE type = 'table'")
         .map((row) => row.name)
@@ -127,7 +127,7 @@ describe('SQLite persistence', () => {
     }
   })
 
-  it('rejects a project repository duplicate', () => {
+  it('reuses the same project and allows another project in the same repo', () => {
     const fixture = createCoreFixture('C:/unique-repo')
     try {
       const human = fixture.tokens.verify(fixture.human)
@@ -136,12 +136,12 @@ describe('SQLite persistence', () => {
         repoPath: 'C:/unique-repo',
       })
       expect(same.id).toBe(fixture.project.id)
-      expect(() =>
-        fixture.service.createProject(human, {
-          name: `Other ${Math.random()}`,
-          repoPath: 'C:/unique-repo',
-        }),
-      ).toThrow(/already belongs/)
+      const other = fixture.service.createProject(human, {
+        name: `Other ${Math.random()}`,
+        repoPath: 'C:/unique-repo',
+      })
+      expect(other.id).not.toBe(fixture.project.id)
+      expect(other.name).toContain('Other')
     } finally {
       fixture.close()
     }

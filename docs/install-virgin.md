@@ -67,9 +67,21 @@ Abrir:
 http://127.0.0.1:4400/ui
 ```
 
-El panel pide un Project ID y un token humano.
+El panel abre con una sesion humana local automatica. Elige o crea un proyecto
+y opera con botones; no hace falta pegar un token.
 
-## Token humano
+Flujo basico:
+
+1. **Crear proyecto** con un nombre.
+2. Escribir el objetivo y pulsar **Crear plan**.
+3. Aprobar el plan en **Aprobacion**.
+4. Pulsar **Iniciar proyecto**.
+5. Crear una tarea con titulo, especialista, ruta y prueba.
+6. Pulsar **Ejecutar scheduler**.
+
+## Token manual para CLI
+
+Solo si vas a usar la CLI o automatizacion:
 
 ```powershell
 npx tsx src/cli.ts auth:issue --kind HUMAN --subject human

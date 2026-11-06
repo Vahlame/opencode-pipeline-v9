@@ -5,10 +5,10 @@
 - Base por defecto: `.runtime/orchestrator.db` (ignorada por Git).
 - Migraciones: `migrations/001_initial.sql`, `002_phase3.sql`, `003_phase4.sql`,
   `004_phase5.sql`, `005_phase6.sql`, `006_phase7.sql` y
-  `007_provider_usage.sql` y `008_usage_events.sql`.
+  `007_provider_usage.sql`, `008_usage_events.sql` y `009_multi_project_repo.sql`.
 - Runner: `src/persistence/database.ts`.
 - Tabla de control: `schema_migrations`.
-- Version actual del esquema: **8**.
+- Version actual del esquema: **9**.
 
 La conexion usa `node:sqlite`, `PRAGMA foreign_keys=ON`, WAL para archivos,
 `busy_timeout=5000` y transacciones `BEGIN IMMEDIATE` para escrituras.

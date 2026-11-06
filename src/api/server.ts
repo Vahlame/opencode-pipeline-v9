@@ -5,10 +5,14 @@ import type { Principal } from '../auth/types.js'
 import { TokenError } from '../auth/tokens.js'
 import { AuthorizationError } from '../auth/authorization.js'
 import { OrchestratorError } from '../orchestrator/errors.js'
-import type { MessageId, PlanId, ProjectId } from '../domain/ids.js'
+import type { AgentId, MessageId, PlanId, ProjectId } from '../domain/ids.js'
 import { DeliveryService } from '../integration/feedback.js'
 import { RecoveryManager } from '../recovery/manager.js'
 import { WorktreeManager } from '../worktrees/manager.js'
+import { createOpenCodeAdapter } from '../opencode/factory.js'
+import { SessionManager } from '../sessions/manager.js'
+import { TaskExecutor } from '../orchestrator/task-executor.js'
+import { Scheduler } from '../orchestrator/scheduler.js'
 import { renderUi } from './ui.js'
 import { runMathScript } from '../math/runner.js'
 import type { AppContext } from '../app/context.js'
@@ -82,6 +86,20 @@ function requireString(body: Record<string, unknown>, key: string): string {
   return value
 }
 
+function stringList(body: Record<string, unknown>, key: string): string[] {
+  const value = body[key]
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item).trim()).filter(Boolean)
+  }
+  if (typeof value === 'string') {
+    return value
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean)
+  }
+  return []
+}
+
 /**
  * API interna local. No registra cuerpos ni tokens. El CLI y la futura UI
  * consumen los mismos servicios que los tests.
@@ -92,6 +110,10 @@ export async function startApiServer(
 ): Promise<ApiServerHandle> {
   const host = options.host ?? context.config.ORCH_API_HOST
   const port = options.port ?? context.config.ORCH_API_PORT
+  const localHumanToken = context.tokens.issue(
+    { subjectId: 'local-ui', kind: 'HUMAN', role: 'HUMAN' },
+    60 * 60 * 24 * 30,
+  )
 
   const server = createServer(async (request, response) => {
     const url = new URL(request.url ?? '/', `http://${request.headers.host ?? 'localhost'}`)
@@ -111,6 +133,15 @@ export async function startApiServer(
         response.setHeader('content-type', 'text/html; charset=utf-8')
         response.setHeader('cache-control', 'no-store')
         response.end(html)
+        return
+      }
+      if (request.method === 'GET' && path === '/api/session') {
+        const remote = request.socket.remoteAddress ?? ''
+        if (!['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(remote)) {
+          sendError(response, 403, 'FORBIDDEN', 'Local UI session only')
+          return
+        }
+        sendJson(response, 200, { token: localHumanToken, subjectId: 'local-ui' })
         return
       }
       if (path.startsWith('/api/tools/')) {
@@ -209,6 +240,157 @@ export async function startApiServer(
       const method = request.method ?? 'GET'
       const projectId = (url.searchParams.get('projectId') ?? undefined) as ProjectId | undefined
 
+      if (method === 'GET' && path === '/api/projects') {
+        sendJson(response, 200, context.service.listProjects(principal))
+        return
+      }
+      if (method === 'POST' && path === '/api/projects') {
+        const body = await readJson(request)
+        const project = context.service.createProject(principal, {
+          name: requireString(body, 'name'),
+          repoPath: context.config.projectDir,
+        })
+        const agents = context.service.bootstrapAgents(principal, project.id)
+        sendJson(response, 201, { project, agents })
+        return
+      }
+      const planMatch = /^\/api\/projects\/([^/]+)\/plan$/.exec(path)
+      if (method === 'POST' && planMatch) {
+        const id = planMatch[1] as ProjectId
+        const body = await readJson(request)
+        const parent = context.store
+          .listAgents(id)
+          .find((agent) => agent.opencodeAgentId === 'padre')
+        if (!parent) throw new OrchestratorError('NOT_FOUND', 'Parent agent not found', 404)
+        const objective = requireString(body, 'objective')
+        const plan = context.service.createPlan(
+          {
+            subjectId: parent.id,
+            kind: 'AGENT',
+            role: parent.role,
+            projectId: id,
+            agentId: parent.id,
+          },
+          {
+            projectId: id,
+            title: requireString(body, 'title'),
+            spec: { objective, source: 'local-ui' },
+            plan: { objective, source: 'local-ui' },
+          },
+        )
+        sendJson(response, 201, plan)
+        return
+      }
+      const taskMatch = /^\/api\/projects\/([^/]+)\/tasks$/.exec(path)
+      if (method === 'POST' && taskMatch) {
+        const id = taskMatch[1] as ProjectId
+        const body = await readJson(request)
+        const title = requireString(body, 'title')
+        const description = String(body.description ?? title)
+        const ownerAgentId = requireString(body, 'ownerAgentId') as AgentId
+        const paths = stringList(body, 'paths')
+        const tests = stringList(body, 'tests')
+        if (paths.length === 0) throw new Error('paths is required')
+        if (tests.length === 0) throw new Error('tests is required')
+        const plan = context.store
+          .listPlans(id)
+          .find((candidate) => candidate.status === 'APPROVED')
+        if (!plan) throw new OrchestratorError('CONFLICT', 'No approved plan', 409)
+        const coordinator = context.store
+          .listAgents(id)
+          .find((agent) => agent.opencodeAgentId === 'coordinador')
+        if (!coordinator)
+          throw new OrchestratorError('NOT_FOUND', 'Coordinator agent not found', 404)
+        const coordinatorPrincipal: Principal = {
+          subjectId: coordinator.id,
+          kind: 'AGENT',
+          role: coordinator.role,
+          projectId: id,
+          agentId: coordinator.id,
+        }
+        const module = context.service.createModule(coordinatorPrincipal, {
+          projectId: id,
+          name: title,
+          ownerAgentId,
+          pathScope: paths,
+        })
+        const task = context.service.createTask(coordinatorPrincipal, {
+          projectId: id,
+          planId: plan.id,
+          title,
+          description,
+          moduleId: module.id,
+          ownerAgentId,
+        })
+        const contract = context.service.createContract(coordinatorPrincipal, {
+          taskId: task.id,
+          moduleId: module.id,
+          objective: description,
+          allowedPaths: paths,
+          inputInterfaces: ['none'],
+          outputInterfaces: ['none'],
+          acceptanceTests: tests,
+          limits: { maxDurationMinutes: 30 },
+          deliveryFormat: 'DeliveryDraft',
+        })
+        const assigned = context.service.assignTask(coordinatorPrincipal, task.id, ownerAgentId)
+        sendJson(response, 201, { module, task: assigned, contract })
+        return
+      }
+      const projectAction = /^\/api\/projects\/([^/]+)\/(start|pause|resume)$/.exec(path)
+      if (method === 'POST' && projectAction) {
+        const id = projectAction[1] as ProjectId
+        const action = projectAction[2]
+        const project =
+          action === 'start'
+            ? context.service.startProject(principal, id)
+            : action === 'pause'
+              ? context.service.pauseProject(principal, id)
+              : context.service.resumeProject(principal, id)
+        sendJson(response, 200, project)
+        return
+      }
+      const schedulerMatch = /^\/api\/projects\/([^/]+)\/scheduler\/run$/.exec(path)
+      if (method === 'POST' && schedulerMatch) {
+        const id = schedulerMatch[1] as ProjectId
+        const maxParallel = Math.min(
+          context.config.ORCH_MAX_PARALLEL,
+          context.config.ORCH_MAX_AGENTS,
+        )
+        const adapter = await createOpenCodeAdapter(context.config)
+        try {
+          const worktrees = new WorktreeManager(
+            context.config.projectDir,
+            context.config.worktreeRoot,
+          )
+          const sessions = new SessionManager(context.store, adapter, context.resources)
+          const executor = new TaskExecutor(
+            context.store,
+            context.service,
+            worktrees,
+            sessions,
+            context.config,
+            context.resources,
+          )
+          const scheduler = new Scheduler(
+            context.store,
+            context.authz,
+            executor,
+            {
+              maxParallel,
+              leaseSeconds: context.config.ORCH_LEASE_SECONDS,
+              taskMaxAttempts: context.config.ORCH_TASK_MAX_ATTEMPTS,
+            },
+            context.resources,
+          )
+          const results = await scheduler.runOnce(principal, id)
+          sendJson(response, 200, { results })
+        } finally {
+          await adapter.close()
+        }
+        return
+      }
+
       if (method === 'GET' && path === '/api/state') {
         sendJson(response, 200, context.service.getState(principal, requireProject(projectId)))
         return
@@ -278,7 +460,46 @@ export async function startApiServer(
       if (method === 'GET' && path === '/api/sessions') {
         const id = requireProject(projectId)
         context.authz.require(principal, 'state.read', { type: 'project', id })
-        sendJson(response, 200, context.store.listSessions(id))
+        const sessions = context.store.listSessions(id).map((session) => {
+          const agent = context.store.getAgent(session.agentId)
+          const task = session.taskId ? context.store.getTask(session.taskId) : undefined
+          return {
+            ...session,
+            agent: agent
+              ? {
+                  id: agent.id,
+                  name: agent.name,
+                  role: agent.role,
+                  opencodeAgentId: agent.opencodeAgentId,
+                }
+              : null,
+            task: task ? { id: task.id, title: task.title, state: task.state } : null,
+            usage: context.store.usageForSession(session.id),
+          }
+        })
+        sessions.sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
+        sendJson(response, 200, sessions)
+        return
+      }
+      const transcriptMatch = /^\/api\/sessions\/([^/]+)\/transcript$/.exec(path)
+      if (method === 'GET' && transcriptMatch) {
+        const session = context.store.getSession(transcriptMatch[1]!)
+        if (!session) throw new OrchestratorError('NOT_FOUND', 'Session not found', 404)
+        context.authz.require(principal, 'state.read', {
+          type: 'project',
+          id: session.projectId,
+        })
+        if (!session.opencodeSessionId) {
+          sendJson(response, 200, { messages: [] })
+          return
+        }
+        const adapter = await createOpenCodeAdapter(context.config)
+        try {
+          const messages = await adapter.getTranscript(session.opencodeSessionId)
+          sendJson(response, 200, { messages })
+        } finally {
+          await adapter.close()
+        }
         return
       }
       if (method === 'GET' && path === '/api/worktrees') {

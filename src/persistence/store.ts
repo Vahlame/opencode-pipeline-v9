@@ -3137,6 +3137,28 @@ export class SqliteStore {
     }))
   }
 
+  usageForSession(sessionId: string): {
+    inputTokens: number
+    outputTokens: number
+    costUsd: number
+    entries: number
+  } {
+    const row = this.db.get<DbRow>(
+      `SELECT COALESCE(SUM(input_tokens), 0) AS input,
+              COALESCE(SUM(output_tokens), 0) AS output,
+              COALESCE(SUM(cost_usd), 0) AS cost,
+              COUNT(*) AS entries
+       FROM usage_events WHERE session_id = ?`,
+      [sessionId],
+    )
+    return {
+      inputTokens: Number(row?.['input'] ?? 0),
+      outputTokens: Number(row?.['output'] ?? 0),
+      costUsd: Number(row?.['cost'] ?? 0),
+      entries: Number(row?.['entries'] ?? 0),
+    }
+  }
+
   countTable(table: string): number {
     if (!/^[a-z_]+$/.test(table)) throw new Error('Invalid table name')
     const row = this.db.get<{ count: number }>(`SELECT COUNT(*) AS count FROM ${table}`)

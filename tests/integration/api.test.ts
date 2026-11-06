@@ -93,6 +93,21 @@ describe('internal API', () => {
     const health = await request(`${base}/api/health`)
     expect(health.status).toBe(200)
 
+    const session = await request(`${base}/api/session`)
+    expect(session.status).toBe(200)
+    expect(typeof (session.body as { token: unknown }).token).toBe('string')
+
+    const projects = await request(`${base}/api/projects`, humanToken)
+    expect(projects.status).toBe(200)
+    expect((projects.body as unknown[]).length).toBeGreaterThan(0)
+
+    const created = await request(`${base}/api/projects`, humanToken, {
+      method: 'POST',
+      body: JSON.stringify({ name: 'API second project' }),
+    })
+    expect(created.status).toBe(201)
+    expect((created.body as { agents: unknown[] }).agents.length).toBeGreaterThan(0)
+
     const unauthenticated = await request(`${base}/api/state?projectId=${project.id}`)
     expect(unauthenticated.status).toBe(401)
 

@@ -23,7 +23,7 @@ Instalacion desde un ZIP: sigue `INSTALAR-CON-OPENCODE.md`.
 - Modelo actual: `opencode-go/deepseek-v4.1-flash`.
 - Runtime interactivo: `HttpOpenCodeAdapter` contra el servidor OpenCode V2 de la app.
 - Runtime CI/headless: `SdkOpenCodeAdapter`; pruebas: `MockOpenCodeAdapter`.
-- Persistencia local en `.runtime/orchestrator.db` (esquema **8**).
+- Persistencia local en `.runtime/orchestrator.db` (esquema **9**).
 - Entrega final legible: `docs/entrega-final.md`.
 
 ## Requisitos
@@ -143,9 +143,11 @@ Con `npm run serve`, abre:
 http://127.0.0.1:4400/ui
 ```
 
-La Control Room permite cargar un proyecto con token, aprobar plan, ver feedback,
-diagnosticar/aplicar recuperacion, consultar integraciones, ver tokens exactos por
-subagente/tarea/proposito y finalizar entregas.
+La Control Room abre con una sesion humana local automatica: no hay que pegar
+tokens. Permite crear y elegir proyectos, proponer un plan, aprobarlo, iniciar
+o pausar el proyecto, crear tareas para un especialista y ejecutar el scheduler.
+Tambien muestra feedback, recuperacion, integraciones, tokens exactos por
+subagente/tarea/proposito y entrega final.
 
 Acceso directo creado en el escritorio:
 
@@ -165,9 +167,26 @@ Para recrearlo:
 npm run shortcut
 ```
 
+Flujo recomendado desde la GUI:
+
+1. **Crear proyecto** con un nombre.
+2. Escribir el objetivo y pulsar **Crear plan**.
+3. Aprobar el plan en la seccion **Aprobacion**.
+4. Pulsar **Iniciar proyecto**.
+5. Crear una tarea: titulo, especialista, ruta permitida y prueba de aceptacion.
+6. Pulsar **Ejecutar scheduler**.
+
+No hace falta token ni CLI para este flujo.
+
+La seccion **Agentes** muestra todas las sesiones del pipeline (especialistas,
+jurados, feedback y coordinacion). Al elegir una, ves su conversacion completa,
+sus tokens y su tarea; para responder, abre esa sesion en OpenCode Desktop.
+
 El plugin `.opencode/plugins/orchestrator-tools.js` expone al agente estado,
 inbox, envio de mensajes, entrega y `orchestrator_math_run`. Requiere
-`ORCH_TOOL_SECRET` y reiniciar OpenCode.
+`ORCH_TOOL_SECRET` y reiniciar OpenCode. Es un plugin local del proyecto: puede
+no aparecer en **Extensiones > Plugins** de la app, que lista plugins globales.
+Se verifica con `orchestrator_state`.
 
 Operacion adicional:
 
@@ -250,7 +269,7 @@ y reglas ordenadas. No se usan campos V1 como `permission`, `bash` o `maxSteps`.
 ```text
 npm run check       -> 104 pruebas pasan, 2 omitidas
 npm run build       -> pasa
-npm run db:migrate  -> esquema 8
+npm run db:migrate  -> esquema 9
 npm run test:real   -> 1 prueba real pasa
 npm run test:sdk    -> 1 prueba SDK pasa
 ```

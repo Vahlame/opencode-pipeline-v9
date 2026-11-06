@@ -255,7 +255,11 @@ cifras no reproducidas.
 `GET /ui` sirve una Control Room sin framework externo con:
 
 - estado del proyecto y tareas;
+- creacion y seleccion de proyectos;
+- creacion de plan y tareas;
+- lista de agentes con su conversacion y consumo;
 - aprobacion de plan;
+- inicio, pausa y ejecucion del scheduler;
 - feedback y dictamenes;
 - integraciones y manifiestos;
 - recuperacion con diagnostico y confirmacion;
@@ -263,7 +267,8 @@ cifras no reproducidas.
 - recursos, mensajes y outbox;
 - tokens exactos por subagente, tarea y proposito.
 
-La GUI usa el mismo API y token humano; no crea una segunda fuente de verdad.
+La GUI usa el mismo API; para uso local abre una sesion humana automatica, sin
+pegar tokens. El token manual sigue disponible para CLI y automatizacion.
 
 ### Herramientas OpenCode
 
@@ -432,7 +437,7 @@ npx tsx src/cli.ts maintenance:cleanup --project <project-id> --keep-days 7 --to
 ```text
 npm run check       -> 104 pruebas pasan, 2 omitidas
 npm run build       -> pasa
-npm run db:migrate  -> esquema 8
+npm run db:migrate  -> esquema 9
 npm run test:real   -> 1 prueba real pasa
 npm run test:sdk    -> 1 prueba SDK pasa
 npm run doctor      -> fase 6, OpenCode V2.2.5, 13 perfiles

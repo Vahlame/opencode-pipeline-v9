@@ -118,7 +118,21 @@ Abre:
 http://127.0.0.1:4400/ui
 ```
 
-La GUI pide un `Project ID` y un token humano. Para emitir el token:
+La GUI abre con una sesion humana local automatica. No hay que pegar ningun
+token. El flujo basico es:
+
+1. **Crear proyecto** con un nombre.
+2. Escribir el objetivo y pulsar **Crear plan**.
+3. Aprobar el plan en **Aprobacion**.
+4. Pulsar **Iniciar proyecto**.
+5. Crear una tarea con titulo, especialista, ruta permitida y prueba.
+6. Pulsar **Ejecutar scheduler**.
+
+La seccion **Agentes** lista todas las sesiones (especialistas, jurados, feedback)
+y muestra la conversacion completa de cada una. Para responder, abre esa sesion
+en OpenCode Desktop.
+
+El token manual solo se necesita para CLI o automatizacion:
 
 ```powershell
 npx tsx src/cli.ts auth:issue --kind HUMAN --subject human

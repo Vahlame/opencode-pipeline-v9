@@ -1551,6 +1551,17 @@ export class SqliteStore {
     return this.getTask(id)!
   }
 
+  renameTask(id: TaskId, title: string, description?: string): Task {
+    const result = this.db.run(
+      `UPDATE tasks
+       SET title = ?, description = COALESCE(?, description), updated_at = ?, version = version + 1
+       WHERE id = ?`,
+      [title, description ?? null, nowIso(), id],
+    )
+    if (result.changes === 0) throw new StoreConflictError(`Task ${id} not found`)
+    return this.getTask(id)!
+  }
+
   setTaskLease(id: TaskId, leaseExpiresAt: string | null): Task {
     const result = this.db.run(
       'UPDATE tasks SET lease_expires_at = ?, updated_at = ?, version = version + 1 WHERE id = ?',

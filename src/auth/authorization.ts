@@ -89,6 +89,7 @@ export type Action =
   | 'outbox.dispatch'
   | 'legacy.reconcile'
   | 'resource.record'
+  | 'task.rename'
 
 export type ResourceType =
   | 'project'
@@ -184,6 +185,7 @@ const COORDINATOR_ACTIONS = new Set<Action>([
   'jury.run',
   'recovery.run',
   'outbox.dispatch',
+  'task.rename',
   'temporary_permission.grant',
 ])
 
@@ -210,6 +212,7 @@ const HUMAN_ACTIONS = new Set<Action>([
   'outbox.dispatch',
   'legacy.reconcile',
   'resource.record',
+  'task.rename',
   'temporary_permission.grant',
 ])
 
@@ -305,6 +308,7 @@ export class AuthorizationService {
       action !== 'outbox.dispatch' &&
       action !== 'legacy.reconcile' &&
       action !== 'resource.record' &&
+      action !== 'task.rename' &&
       ['COMPLETED', 'FAILED', 'CANCELLED'].includes(projectState.status)
     ) {
       return this.record(

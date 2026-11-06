@@ -574,6 +574,49 @@ export function registerPhase6Commands(program: Command): void {
       }
     })
 
+  addProject(addToken(program.command('task:rename')))
+    .description('Cambia el nombre visible de una tarea sin cambiar su ID interno')
+    .option('--task <id>', 'task ID')
+    .option('--title <text>', 'nuevo titulo')
+    .option('--description <text>', 'nueva descripcion')
+    .option('--json', 'salida JSON')
+    .action(async (options: CliOptions) => {
+      const context = createAppContext()
+      try {
+        const task = context.store.getTask(getString(options, 'task') as TaskId)
+        if (!task) throw new OrchestratorError('NOT_FOUND', 'Task not found', 404)
+        context.authz.require(principal(context, options), 'task.rename', {
+          type: 'project',
+          id: task.projectId,
+        })
+        const renamed = context.store.transaction(() => {
+          const updated = context.store.renameTask(
+            task.id,
+            getString(options, 'title'),
+            getLocal(options, 'description'),
+          )
+          const event = context.store.appendEvent({
+            projectId: task.projectId,
+            type: 'task.renamed',
+            aggregateType: 'task',
+            aggregateId: task.id,
+            actorId: principal(context, options).subjectId,
+            payload: { taskId: task.id, previousTitle: task.title, title: updated.title },
+          })
+          context.store.appendOutbox(event.id, 'orchestrator.events', {
+            eventId: event.id,
+            type: event.type,
+            aggregateId: event.aggregateId,
+          })
+          return updated
+        })
+        if (options.json === true) print(renamed)
+        else process.stdout.write(`Tarea ${renamed.id}: ${renamed.title}\n`)
+      } finally {
+        context.close()
+      }
+    })
+
   addProject(addToken(program.command('legacy:reconcile')))
     .description('Reconcilia una tarea legacy con aprobacion humana explicita')
     .option('--task <id>', 'task ID')

@@ -303,7 +303,7 @@ El agente `matematico` puede usar `orchestrator_math_run` a traves del plugin.
 
 ### Outbox y uso exacto
 
-- `outbox:dispatch --transport file` entrego **116 eventos** a
+- `outbox:dispatch --transport file` entrego **118 eventos** a
   `.runtime/outbox.ndjson`; la outbox quedo en 0 pendientes.
 - `usage:record` importa uso exacto del proveedor (tokens, coste y request ID).
   La estimacion local sigue existiendo para cuando OpenCode no entrega datos.

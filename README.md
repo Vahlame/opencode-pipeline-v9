@@ -172,6 +172,9 @@ Operacion adicional:
 npx tsx src/cli.ts outbox:dispatch --project <id> --transport file --target .runtime/outbox.ndjson --token $HUMAN
 npx tsx src/cli.ts delivery:verify --delivery <id> --token $HUMAN
 npx tsx src/cli.ts usage:record --project <id> --provider opencode-go --input <n> --output <n> --cost <usd> --token $HUMAN
+npx tsx src/cli.ts usage:breakdown --project <id> --by agent --token $HUMAN
+npx tsx src/cli.ts usage:breakdown --project <id> --by task --token $HUMAN
+npx tsx src/cli.ts usage:breakdown --project <id> --by purpose --token $HUMAN
 npx tsx src/cli.ts math:run --project <id> --script research/math/check.py --token $HUMAN
 npx tsx src/cli.ts legacy:reconcile --task <id> --decision cancel --confirm --token $HUMAN
 ```

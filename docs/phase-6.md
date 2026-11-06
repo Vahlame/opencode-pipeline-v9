@@ -306,6 +306,9 @@ El agente `matematico` puede usar `orchestrator_math_run` a traves del plugin.
   `.runtime/outbox.ndjson`; la outbox quedo en 0 pendientes.
 - `usage:record` importa uso exacto del proveedor (tokens, coste y request ID).
   La estimacion local sigue existiendo para cuando el proveedor no entrega datos.
+- `usage_events` registra uso por agente, tarea, sesion y proposito.
+  `usage:breakdown --by agent|task|session|purpose` muestra el desglose.
+- `math:run` ejecuta scripts con Python o Node detectando hardware.
 
 ### Firmas
 

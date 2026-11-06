@@ -144,6 +144,24 @@ http://127.0.0.1:4400/ui
 La Control Room permite cargar un proyecto con token, aprobar plan, ver feedback,
 diagnosticar/aplicar recuperacion, consultar integraciones y finalizar entregas.
 
+Acceso directo creado en el escritorio:
+
+```text
+OpenCode Pipeline V9
+```
+
+Tambien se arranca con:
+
+```powershell
+npm run open
+```
+
+Para recrearlo:
+
+```powershell
+npm run shortcut
+```
+
 El plugin `.opencode/plugins/orchestrator-tools.js` expone al agente estado,
 inbox, envio de mensajes, entrega y `orchestrator_math_run`. Requiere
 `ORCH_TOOL_SECRET` y reiniciar OpenCode.

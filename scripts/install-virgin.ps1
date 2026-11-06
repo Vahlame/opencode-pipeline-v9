@@ -21,6 +21,14 @@ if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
 }
 $nodeVersion = (node --version).Trim()
 Write-Host "Node: $nodeVersion"
+$nodeSemver = $nodeVersion.TrimStart('v')
+$parsedNode = $null
+if (-not [version]::TryParse($nodeSemver, [ref]$parsedNode)) {
+  throw "No se pudo interpretar la version de Node: $nodeVersion. Se requiere 26.4.0 o superior."
+}
+if ($parsedNode -lt [version]'26.4.0') {
+  throw "Node.js $nodeSemver es demasiado antiguo. Se requiere 26.4.0 o superior."
+}
 if (-not (Get-Command npm -ErrorAction SilentlyContinue)) {
   throw 'npm no esta disponible.'
 }

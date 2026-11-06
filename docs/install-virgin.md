@@ -10,6 +10,17 @@
 
 No uses el `opencode` V1 del PATH. La app V2 usa su propio CLI/servidor.
 
+Instalacion de requisitos en Windows (ejemplo con winget):
+
+```powershell
+winget install OpenJS.NodeJS
+winget install Git.Git
+node --version   # debe ser 26.4.0 o superior
+```
+
+OpenCode Desktop V2.2.5+ se instala desde su distribucion oficial. Si el
+`opencode` del PATH es V1, no lo uses para este proyecto.
+
 ## Instalacion automatica
 
 ```powershell

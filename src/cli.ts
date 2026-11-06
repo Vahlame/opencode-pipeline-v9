@@ -11,6 +11,7 @@ import type { OpenCodeAdapter } from './opencode/adapter.js'
 import { registerPhase2Commands } from './cli/phase2.js'
 import { registerPhase3Commands } from './cli/phase3.js'
 import { registerPhase4Commands } from './cli/phase4.js'
+import { registerPhase5Commands } from './cli/phase5.js'
 import { SqliteStore } from './persistence/store.js'
 
 loadDotEnv({ quiet: true })
@@ -79,6 +80,10 @@ async function runDoctor(config: AppConfig): Promise<void> {
     juryRuns: store.countTable('jury_runs'),
     consolidations: store.countTable('jury_consolidations'),
     approvedModules: store.countTable('approved_modules'),
+    integrationRuns: store.countTable('integration_runs'),
+    integrationManifests: store.countTable('integration_manifests'),
+    feedbackRuns: store.countTable('feedback_runs'),
+    finalDeliveries: store.countTable('final_deliveries'),
   }
   store.close()
 
@@ -86,7 +91,7 @@ async function runDoctor(config: AppConfig): Promise<void> {
     const health = await adapter.health()
     const agents = health.ok ? await adapter.listAgents({ directory: config.projectDir }) : []
     const report = {
-      phase: 4,
+      phase: 5,
       node: process.version,
       authSecretConfigured: Boolean(config.ORCH_AUTH_SECRET),
       db: {
@@ -94,6 +99,10 @@ async function runDoctor(config: AppConfig): Promise<void> {
         juryRuns: db.juryRuns,
         consolidations: db.consolidations,
         approvedModules: db.approvedModules,
+        integrationRuns: db.integrationRuns,
+        integrationManifests: db.integrationManifests,
+        feedbackRuns: db.feedbackRuns,
+        finalDeliveries: db.finalDeliveries,
       },
       platform: `${process.platform}/${process.arch}`,
       projectDir: config.projectDir,
@@ -172,8 +181,8 @@ interface SmokeCommandOptions {
 const program = new Command()
 program
   .name('orch')
-  .description('OpenCode Multiagent Orchestrator V9 - Fase 2 (núcleo persistente)')
-  .version('0.4.0')
+  .description('OpenCode Multiagent Orchestrator V9 - Fase 5 (integracion y feedback)')
+  .version('0.5.0')
 
 program
   .command('doctor')
@@ -205,6 +214,7 @@ program
 registerPhase2Commands(program)
 registerPhase3Commands(program)
 registerPhase4Commands(program)
+registerPhase5Commands(program)
 
 program.parseAsync(process.argv).catch((error: unknown) => {
   const message = error instanceof Error ? error.message : String(error)

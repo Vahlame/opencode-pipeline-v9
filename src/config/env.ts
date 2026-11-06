@@ -62,6 +62,8 @@ const EnvSchema = z.object({
   ORCH_GIT_BASE_REF: z.preprocess(emptyToUndefined, z.string().min(1).default('HEAD')),
   ORCH_MAX_REWORK_CYCLES: z.coerce.number().int().min(0).max(10).default(2),
   ORCH_JURY_TIMEOUT_MS: z.coerce.number().int().min(10_000).max(3_600_000).default(180_000),
+  ORCH_INTEGRATION_TIMEOUT_MS: z.coerce.number().int().min(10_000).max(3_600_000).default(300_000),
+  ORCH_FEEDBACK_TIMEOUT_MS: z.coerce.number().int().min(10_000).max(3_600_000).default(300_000),
   LOG_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
 })
 

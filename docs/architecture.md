@@ -67,3 +67,22 @@ ejecución ni entrega de mensajes a sesiones ocupadas.
 - La app Desktop puede actualizarse y cambiar su CLI interno.
 - El modelo por defecto puede no soportar herramientas; para fases posteriores se debe elegir un modelo con `capabilities.tools`.
 - La API GUI de OpenCode Desktop es experimental y no forma parte de la Fase 1.
+
+## Anadido en la Fase 5
+
+- `src/integration/workspace.ts`: composicion exacta de snapshots aprobados en un
+  worktree aislado, sin merges ni edicion de modulos.
+- `src/integration/manager.ts`: validacion de aprobaciones, conflictos menores y
+  estructurales, adaptadores versionados y manifiesto reproducible.
+- `src/integration/feedback.ts`: feedback global de solo lectura, puerta
+  determinista, rework localizado y entrega final.
+- Persistencia: `integration_runs`, `integration_modules`,
+  `integration_adapters`, `integration_conflicts`, `integration_manifests`,
+  `feedback_runs` y `final_deliveries`.
+- CLI: `integration:*`, `feedback:*`, `deliveries:*` y `delivery:*`.
+- API: lectura de integraciones, manifiestos, feedback y entregas; finalizacion
+  humana de entrega.
+
+El integrador no confia en el agente para decidir aprobaciones, rutas, hashes ni
+transiciones. El feedback no puede aprobar por si solo: el orquestador valida
+plan, manifiesto, commits, aprobaciones, pruebas y evidencia.

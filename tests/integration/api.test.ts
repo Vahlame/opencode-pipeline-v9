@@ -100,6 +100,25 @@ describe('internal API', () => {
     expect(state.status).toBe(200)
     expect((state.body as { agents: unknown[] }).agents).toHaveLength(11)
 
+    const integrations = await request(
+      `${base}/api/integrations?projectId=${project.id}`,
+      humanToken,
+    )
+    expect(integrations.status).toBe(200)
+    expect(integrations.body).toEqual([])
+    const manifests = await request(
+      `${base}/api/integrations/manifests?projectId=${project.id}`,
+      humanToken,
+    )
+    expect(manifests.status).toBe(200)
+    expect(manifests.body).toEqual([])
+    const feedback = await request(`${base}/api/feedback?projectId=${project.id}`, humanToken)
+    expect(feedback.status).toBe(200)
+    expect(feedback.body).toEqual([])
+    const deliveries = await request(`${base}/api/deliveries?projectId=${project.id}`, humanToken)
+    expect(deliveries.status).toBe(200)
+    expect(deliveries.body).toEqual([])
+
     const sent = await request(`${base}/api/messages`, coordinatorToken, {
       method: 'POST',
       body: JSON.stringify({

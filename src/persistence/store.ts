@@ -30,6 +30,7 @@ import type {
   TaskId,
 } from '../domain/ids.js'
 import { createId, nowIso } from '../domain/id-factory.js'
+import { sha256 } from '../security/hash.js'
 import { redact, redactText } from '../security/redaction.js'
 import { SqliteDatabase } from './database.js'
 
@@ -374,6 +375,119 @@ function toApprovedModule(row: DbRow): ApprovedModuleRecord {
   }
 }
 
+function toIntegrationRun(row: DbRow): IntegrationRunRecord {
+  return {
+    id: text(row, 'id'),
+    projectId: text(row, 'project_id') as ProjectId,
+    planId: text(row, 'plan_id') as PlanId,
+    status: text(row, 'status') as IntegrationRunRecord['status'],
+    attempt: integer(row, 'attempt'),
+    baseCommit: text(row, 'base_commit'),
+    integrationPath: text(row, 'integration_path'),
+    inputHash: text(row, 'input_hash'),
+    ...(optionalText(row, 'manifest_hash')
+      ? { manifestHash: optionalText(row, 'manifest_hash') }
+      : {}),
+    ...(optionalText(row, 'error') ? { error: optionalText(row, 'error') } : {}),
+    createdAt: text(row, 'created_at'),
+    ...(optionalText(row, 'completed_at')
+      ? { completedAt: optionalText(row, 'completed_at') }
+      : {}),
+  }
+}
+
+function toIntegrationModule(row: DbRow): IntegrationModuleRecord {
+  return {
+    id: text(row, 'id'),
+    runId: text(row, 'run_id'),
+    moduleId: text(row, 'module_id') as ModuleId,
+    moduleVersionId: text(row, 'module_version_id') as ModuleVersionId,
+    commitSha: text(row, 'commit_sha'),
+    artifactHash: text(row, 'artifact_hash'),
+    ...(optionalText(row, 'contract_id')
+      ? { contractId: optionalText(row, 'contract_id') as ContractId }
+      : {}),
+    status: text(row, 'status') as IntegrationModuleRecord['status'],
+    createdAt: text(row, 'created_at'),
+  }
+}
+
+function toIntegrationAdapter(row: DbRow): IntegrationAdapterRecord {
+  return {
+    id: text(row, 'id'),
+    runId: text(row, 'run_id'),
+    moduleId: text(row, 'module_id') as ModuleId,
+    path: text(row, 'path'),
+    commitSha: text(row, 'commit_sha'),
+    version: integer(row, 'version'),
+    tests: json(row, 'tests_json'),
+    review: json(row, 'review_json'),
+    status: text(row, 'status') as IntegrationAdapterRecord['status'],
+    createdAt: text(row, 'created_at'),
+  }
+}
+
+function toIntegrationConflict(row: DbRow): IntegrationConflictRecord {
+  return {
+    id: text(row, 'id'),
+    runId: text(row, 'run_id'),
+    type: text(row, 'type') as IntegrationConflictRecord['type'],
+    code: text(row, 'code'),
+    message: text(row, 'message'),
+    modules: json(row, 'modules_json'),
+    evidence: json(row, 'evidence_json'),
+    ...(optionalText(row, 'resolution') ? { resolution: optionalText(row, 'resolution') } : {}),
+    createdAt: text(row, 'created_at'),
+  }
+}
+
+function toIntegrationManifest(row: DbRow): IntegrationManifestRecord {
+  return {
+    id: text(row, 'id'),
+    projectId: text(row, 'project_id') as ProjectId,
+    planId: text(row, 'plan_id') as PlanId,
+    runId: text(row, 'run_id'),
+    hash: text(row, 'hash'),
+    baseCommit: text(row, 'base_commit'),
+    manifest: json(row, 'manifest_json'),
+    createdAt: text(row, 'created_at'),
+  }
+}
+
+function toFeedbackRun(row: DbRow): FeedbackRunRecord {
+  return {
+    id: text(row, 'id'),
+    projectId: text(row, 'project_id') as ProjectId,
+    planId: text(row, 'plan_id') as PlanId,
+    manifestId: text(row, 'manifest_id'),
+    status: text(row, 'status') as FeedbackRunRecord['status'],
+    ...(optionalText(row, 'verdict')
+      ? { verdict: optionalText(row, 'verdict') as FeedbackRunRecord['verdict'] }
+      : {}),
+    report: json(row, 'report_json'),
+    hash: text(row, 'hash'),
+    createdAt: text(row, 'created_at'),
+    ...(optionalText(row, 'completed_at')
+      ? { completedAt: optionalText(row, 'completed_at') }
+      : {}),
+  }
+}
+
+function toFinalDelivery(row: DbRow): FinalDeliveryRecord {
+  return {
+    id: text(row, 'id'),
+    projectId: text(row, 'project_id') as ProjectId,
+    manifestId: text(row, 'manifest_id'),
+    feedbackId: text(row, 'feedback_id'),
+    status: text(row, 'status') as FinalDeliveryRecord['status'],
+    summary: json(row, 'summary_json'),
+    createdAt: text(row, 'created_at'),
+    ...(optionalText(row, 'delivered_at')
+      ? { deliveredAt: optionalText(row, 'delivered_at') }
+      : {}),
+  }
+}
+
 function toAuditEntry(row: DbRow): AuditEntry {
   return {
     id: text(row, 'id') as AuditId,
@@ -590,6 +704,93 @@ export interface ApprovedModuleRecord {
   readonly artifactHash: string
   readonly approvedAt: string
   readonly juryRunId: string
+}
+
+export interface IntegrationRunRecord {
+  readonly id: string
+  readonly projectId: ProjectId
+  readonly planId: PlanId
+  readonly status: 'RUNNING' | 'SUCCEEDED' | 'STRUCTURAL_FAILED' | 'FAILED'
+  readonly attempt: number
+  readonly baseCommit: string
+  readonly integrationPath: string
+  readonly inputHash: string
+  readonly manifestHash?: string
+  readonly error?: string
+  readonly createdAt: string
+  readonly completedAt?: string
+}
+
+export interface IntegrationModuleRecord {
+  readonly id: string
+  readonly runId: string
+  readonly moduleId: ModuleId
+  readonly moduleVersionId: ModuleVersionId
+  readonly commitSha: string
+  readonly artifactHash: string
+  readonly contractId?: ContractId
+  readonly status: 'INCLUDED' | 'REJECTED'
+  readonly createdAt: string
+}
+
+export interface IntegrationAdapterRecord {
+  readonly id: string
+  readonly runId: string
+  readonly moduleId: ModuleId
+  readonly path: string
+  readonly commitSha: string
+  readonly version: number
+  readonly tests: unknown[]
+  readonly review: unknown
+  readonly status: 'VALIDATED' | 'REJECTED'
+  readonly createdAt: string
+}
+
+export interface IntegrationConflictRecord {
+  readonly id: string
+  readonly runId: string
+  readonly type: 'MINOR' | 'STRUCTURAL'
+  readonly code: string
+  readonly message: string
+  readonly modules: ModuleId[]
+  readonly evidence: string[]
+  readonly resolution?: string
+  readonly createdAt: string
+}
+
+export interface IntegrationManifestRecord {
+  readonly id: string
+  readonly projectId: ProjectId
+  readonly planId: PlanId
+  readonly runId: string
+  readonly hash: string
+  readonly baseCommit: string
+  readonly manifest: Record<string, unknown>
+  readonly createdAt: string
+}
+
+export interface FeedbackRunRecord {
+  readonly id: string
+  readonly projectId: ProjectId
+  readonly planId: PlanId
+  readonly manifestId: string
+  readonly status: 'RUNNING' | 'COMPLETED' | 'FAILED'
+  readonly verdict?: 'PASS' | 'FAIL'
+  readonly report: Record<string, unknown>
+  readonly hash: string
+  readonly createdAt: string
+  readonly completedAt?: string
+}
+
+export interface FinalDeliveryRecord {
+  readonly id: string
+  readonly projectId: ProjectId
+  readonly manifestId: string
+  readonly feedbackId: string
+  readonly status: 'READY' | 'DELIVERED'
+  readonly summary: Record<string, unknown>
+  readonly createdAt: string
+  readonly deliveredAt?: string
 }
 
 export interface TaskAttemptRecord {
@@ -1815,6 +2016,391 @@ export class SqliteStore {
       }))
   }
 
+  createIntegrationRun(record: {
+    readonly projectId: ProjectId
+    readonly planId: PlanId
+    readonly attempt: number
+    readonly baseCommit: string
+    readonly integrationPath: string
+    readonly inputHash: string
+  }): IntegrationRunRecord {
+    const id = createId('irn')
+    const timestamp = nowIso()
+    this.db.run(
+      `INSERT INTO integration_runs
+        (id, project_id, plan_id, status, attempt, base_commit, integration_path, input_hash,
+         created_at)
+       VALUES (?, ?, ?, 'RUNNING', ?, ?, ?, ?, ?)`,
+      [
+        id,
+        record.projectId,
+        record.planId,
+        record.attempt,
+        record.baseCommit,
+        record.integrationPath,
+        record.inputHash,
+        timestamp,
+      ],
+    )
+    return this.getIntegrationRun(id)!
+  }
+
+  getIntegrationRun(id: string): IntegrationRunRecord | undefined {
+    const row = this.db.get<DbRow>('SELECT * FROM integration_runs WHERE id = ?', [id])
+    return row ? toIntegrationRun(row) : undefined
+  }
+
+  latestIntegrationAttempt(projectId: ProjectId, planId: PlanId, inputHash: string): number {
+    const row = this.db.get<DbRow>(
+      `SELECT COALESCE(MAX(attempt), 0) AS attempt FROM integration_runs
+       WHERE project_id = ? AND plan_id = ? AND input_hash = ?`,
+      [projectId, planId, inputHash],
+    )
+    return row ? integer(row, 'attempt') : 0
+  }
+
+  findReusableIntegrationRun(
+    projectId: ProjectId,
+    planId: PlanId,
+    inputHash: string,
+  ): IntegrationRunRecord | undefined {
+    const row = this.db.get<DbRow>(
+      `SELECT r.* FROM integration_runs r
+       JOIN integration_manifests m ON m.run_id = r.id
+       WHERE r.project_id = ? AND r.plan_id = ? AND r.input_hash = ?
+         AND r.status = 'SUCCEEDED'
+       ORDER BY r.attempt DESC LIMIT 1`,
+      [projectId, planId, inputHash],
+    )
+    return row ? toIntegrationRun(row) : undefined
+  }
+
+  updateIntegrationRun(
+    id: string,
+    patch: {
+      readonly status: IntegrationRunRecord['status']
+      readonly manifestHash?: string
+      readonly error?: string
+    },
+  ): IntegrationRunRecord {
+    const result = this.db.run(
+      `UPDATE integration_runs
+       SET status = ?, manifest_hash = COALESCE(?, manifest_hash), error = ?, completed_at = ?
+       WHERE id = ?`,
+      [
+        patch.status,
+        patch.manifestHash ?? null,
+        patch.error ? redactText(patch.error).slice(0, 2000) : null,
+        patch.status === 'RUNNING' ? null : nowIso(),
+        id,
+      ],
+    )
+    if (result.changes === 0) throw new StoreConflictError(`Integration run ${id} not found`)
+    return this.getIntegrationRun(id)!
+  }
+
+  listIntegrationRuns(projectId: ProjectId): IntegrationRunRecord[] {
+    return this.db
+      .all<DbRow>('SELECT * FROM integration_runs WHERE project_id = ? ORDER BY created_at DESC', [
+        projectId,
+      ])
+      .map(toIntegrationRun)
+  }
+
+  createIntegrationModule(record: {
+    readonly runId: string
+    readonly moduleId: ModuleId
+    readonly moduleVersionId: ModuleVersionId
+    readonly commitSha: string
+    readonly artifactHash: string
+    readonly contractId?: ContractId
+    readonly status?: IntegrationModuleRecord['status']
+  }): IntegrationModuleRecord {
+    const id = createId('imd')
+    this.db.run(
+      `INSERT INTO integration_modules
+        (id, run_id, module_id, module_version_id, commit_sha, artifact_hash, contract_id,
+         status, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        record.runId,
+        record.moduleId,
+        record.moduleVersionId,
+        record.commitSha,
+        record.artifactHash,
+        record.contractId ?? null,
+        record.status ?? 'INCLUDED',
+        nowIso(),
+      ],
+    )
+    const row = this.db.get<DbRow>('SELECT * FROM integration_modules WHERE id = ?', [id])
+    return toIntegrationModule(row!)
+  }
+
+  listIntegrationModules(runId: string): IntegrationModuleRecord[] {
+    return this.db
+      .all<DbRow>('SELECT * FROM integration_modules WHERE run_id = ? ORDER BY module_id', [runId])
+      .map(toIntegrationModule)
+  }
+
+  createIntegrationAdapter(record: {
+    readonly runId: string
+    readonly moduleId: ModuleId
+    readonly path: string
+    readonly commitSha: string
+    readonly version: number
+    readonly tests: unknown[]
+    readonly review: unknown
+    readonly status?: IntegrationAdapterRecord['status']
+  }): IntegrationAdapterRecord {
+    const id = createId('iad')
+    this.db.run(
+      `INSERT INTO integration_adapters
+        (id, run_id, module_id, path, commit_sha, version, tests_json, review_json, status,
+         created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        record.runId,
+        record.moduleId,
+        record.path,
+        record.commitSha,
+        record.version,
+        JSON.stringify(redact(record.tests)),
+        JSON.stringify(redact(record.review)),
+        record.status ?? 'VALIDATED',
+        nowIso(),
+      ],
+    )
+    const row = this.db.get<DbRow>('SELECT * FROM integration_adapters WHERE id = ?', [id])
+    return toIntegrationAdapter(row!)
+  }
+
+  listIntegrationAdapters(runId: string): IntegrationAdapterRecord[] {
+    return this.db
+      .all<DbRow>('SELECT * FROM integration_adapters WHERE run_id = ? ORDER BY path', [runId])
+      .map(toIntegrationAdapter)
+  }
+
+  createIntegrationConflict(record: {
+    readonly runId: string
+    readonly type: IntegrationConflictRecord['type']
+    readonly code: string
+    readonly message: string
+    readonly modules: readonly ModuleId[]
+    readonly evidence: readonly string[]
+    readonly resolution?: string
+  }): IntegrationConflictRecord {
+    const id = createId('icf')
+    this.db.run(
+      `INSERT INTO integration_conflicts
+        (id, run_id, type, code, message, modules_json, evidence_json, resolution, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        record.runId,
+        record.type,
+        record.code,
+        redactText(record.message),
+        JSON.stringify(record.modules),
+        JSON.stringify(record.evidence.map(redactText)),
+        record.resolution ? redactText(record.resolution) : null,
+        nowIso(),
+      ],
+    )
+    const row = this.db.get<DbRow>('SELECT * FROM integration_conflicts WHERE id = ?', [id])
+    return toIntegrationConflict(row!)
+  }
+
+  listIntegrationConflicts(runId: string): IntegrationConflictRecord[] {
+    return this.db
+      .all<DbRow>('SELECT * FROM integration_conflicts WHERE run_id = ? ORDER BY created_at', [
+        runId,
+      ])
+      .map(toIntegrationConflict)
+  }
+
+  createIntegrationManifest(record: {
+    readonly projectId: ProjectId
+    readonly planId: PlanId
+    readonly runId: string
+    readonly hash: string
+    readonly baseCommit: string
+    readonly manifest: Record<string, unknown>
+  }): IntegrationManifestRecord {
+    const id = createId('imn')
+    this.db.run(
+      `INSERT INTO integration_manifests
+        (id, project_id, plan_id, run_id, hash, base_commit, manifest_json, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        record.projectId,
+        record.planId,
+        record.runId,
+        record.hash,
+        record.baseCommit,
+        JSON.stringify(redact(record.manifest)),
+        nowIso(),
+      ],
+    )
+    return this.getIntegrationManifest(id)!
+  }
+
+  getIntegrationManifest(id: string): IntegrationManifestRecord | undefined {
+    const row = this.db.get<DbRow>('SELECT * FROM integration_manifests WHERE id = ?', [id])
+    return row ? toIntegrationManifest(row) : undefined
+  }
+
+  getIntegrationManifestByRun(runId: string): IntegrationManifestRecord | undefined {
+    const row = this.db.get<DbRow>('SELECT * FROM integration_manifests WHERE run_id = ?', [runId])
+    return row ? toIntegrationManifest(row) : undefined
+  }
+
+  getIntegrationManifestByHash(
+    projectId: ProjectId,
+    hash: string,
+  ): IntegrationManifestRecord | undefined {
+    const row = this.db.get<DbRow>(
+      'SELECT * FROM integration_manifests WHERE project_id = ? AND hash = ?',
+      [projectId, hash],
+    )
+    return row ? toIntegrationManifest(row) : undefined
+  }
+
+  listIntegrationManifests(projectId: ProjectId): IntegrationManifestRecord[] {
+    return this.db
+      .all<DbRow>(
+        'SELECT * FROM integration_manifests WHERE project_id = ? ORDER BY created_at DESC',
+        [projectId],
+      )
+      .map(toIntegrationManifest)
+  }
+
+  createFeedbackRun(record: {
+    readonly projectId: ProjectId
+    readonly planId: PlanId
+    readonly manifestId: string
+    readonly report?: Record<string, unknown>
+    readonly hash?: string
+  }): FeedbackRunRecord {
+    const id = createId('fbr')
+    this.db.run(
+      `INSERT INTO feedback_runs
+        (id, project_id, plan_id, manifest_id, status, verdict, report_json, hash, created_at)
+       VALUES (?, ?, ?, ?, 'RUNNING', NULL, ?, ?, ?)`,
+      [
+        id,
+        record.projectId,
+        record.planId,
+        record.manifestId,
+        JSON.stringify(redact(record.report ?? {})),
+        record.hash ?? sha256('feedback-running'),
+        nowIso(),
+      ],
+    )
+    return this.getFeedbackRun(id)!
+  }
+
+  getFeedbackRun(id: string): FeedbackRunRecord | undefined {
+    const row = this.db.get<DbRow>('SELECT * FROM feedback_runs WHERE id = ?', [id])
+    return row ? toFeedbackRun(row) : undefined
+  }
+
+  getFeedbackRunByManifest(manifestId: string): FeedbackRunRecord | undefined {
+    const row = this.db.get<DbRow>('SELECT * FROM feedback_runs WHERE manifest_id = ?', [
+      manifestId,
+    ])
+    return row ? toFeedbackRun(row) : undefined
+  }
+
+  updateFeedbackRun(
+    id: string,
+    record: {
+      readonly status: FeedbackRunRecord['status']
+      readonly verdict?: FeedbackRunRecord['verdict']
+      readonly report: Record<string, unknown>
+      readonly hash: string
+    },
+  ): FeedbackRunRecord {
+    const result = this.db.run(
+      `UPDATE feedback_runs
+       SET status = ?, verdict = ?, report_json = ?, hash = ?, completed_at = ?
+       WHERE id = ?`,
+      [
+        record.status,
+        record.verdict ?? null,
+        JSON.stringify(redact(record.report)),
+        record.hash,
+        record.status === 'RUNNING' ? null : nowIso(),
+        id,
+      ],
+    )
+    if (result.changes === 0) throw new StoreConflictError(`Feedback run ${id} not found`)
+    return this.getFeedbackRun(id)!
+  }
+
+  listFeedbackRuns(projectId: ProjectId): FeedbackRunRecord[] {
+    return this.db
+      .all<DbRow>('SELECT * FROM feedback_runs WHERE project_id = ? ORDER BY created_at DESC', [
+        projectId,
+      ])
+      .map(toFeedbackRun)
+  }
+
+  createFinalDelivery(record: {
+    readonly projectId: ProjectId
+    readonly manifestId: string
+    readonly feedbackId: string
+    readonly summary: Record<string, unknown>
+  }): FinalDeliveryRecord {
+    const id = createId('fdl')
+    this.db.run(
+      `INSERT INTO final_deliveries
+        (id, project_id, manifest_id, feedback_id, status, summary_json, created_at)
+       VALUES (?, ?, ?, ?, 'READY', ?, ?)`,
+      [
+        id,
+        record.projectId,
+        record.manifestId,
+        record.feedbackId,
+        JSON.stringify(redact(record.summary)),
+        nowIso(),
+      ],
+    )
+    return this.getFinalDelivery(id)!
+  }
+
+  getFinalDelivery(id: string): FinalDeliveryRecord | undefined {
+    const row = this.db.get<DbRow>('SELECT * FROM final_deliveries WHERE id = ?', [id])
+    return row ? toFinalDelivery(row) : undefined
+  }
+
+  getFinalDeliveryByManifest(manifestId: string): FinalDeliveryRecord | undefined {
+    const row = this.db.get<DbRow>('SELECT * FROM final_deliveries WHERE manifest_id = ?', [
+      manifestId,
+    ])
+    return row ? toFinalDelivery(row) : undefined
+  }
+
+  listFinalDeliveries(projectId: ProjectId): FinalDeliveryRecord[] {
+    return this.db
+      .all<DbRow>('SELECT * FROM final_deliveries WHERE project_id = ? ORDER BY created_at DESC', [
+        projectId,
+      ])
+      .map(toFinalDelivery)
+  }
+
+  markFinalDeliveryDelivered(id: string): FinalDeliveryRecord {
+    const result = this.db.run(
+      `UPDATE final_deliveries SET status = 'DELIVERED', delivered_at = ? WHERE id = ?`,
+      [nowIso(), id],
+    )
+    if (result.changes === 0) throw new StoreConflictError(`Final delivery ${id} not found`)
+    return this.getFinalDelivery(id)!
+  }
+
   countTable(table: string): number {
     if (!/^[a-z_]+$/.test(table)) throw new Error('Invalid table name')
     const row = this.db.get<{ count: number }>(`SELECT COUNT(*) AS count FROM ${table}`)
@@ -1833,4 +2419,8 @@ export {
   toReview,
   toApproval,
   toEvent,
+  toIntegrationRun,
+  toIntegrationManifest,
+  toFeedbackRun,
+  toFinalDelivery,
 }

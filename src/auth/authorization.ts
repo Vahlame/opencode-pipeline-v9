@@ -76,7 +76,11 @@ export type Action =
   | 'outbox.read'
   | 'temporary_permission.grant'
   | 'integration.run'
+  | 'integration.read'
   | 'feedback.submit'
+  | 'feedback.read'
+  | 'delivery.read'
+  | 'delivery.finalize'
 
 export type ResourceType =
   | 'project'
@@ -149,6 +153,9 @@ const READ_ACTIONS = new Set<Action>([
   'audit.read',
   'checkpoint.read',
   'outbox.read',
+  'integration.read',
+  'feedback.read',
+  'delivery.read',
 ])
 
 const COORDINATOR_ACTIONS = new Set<Action>([
@@ -184,6 +191,7 @@ const HUMAN_ACTIONS = new Set<Action>([
   'checkpoint.write',
   'session.interrupt',
   'jury.run',
+  'delivery.finalize',
   'temporary_permission.grant',
 ])
 

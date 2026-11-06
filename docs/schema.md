@@ -1,81 +1,107 @@
-# Esquema SQLite de la Fase 2
+# Esquema SQLite - Fase 5
 
-## Ubicación y migraciones
+## Ubicacion y migraciones
 
 - Base por defecto: `.runtime/orchestrator.db` (ignorada por Git).
-- Migraciones: `migrations/001_initial.sql`, `migrations/002_phase3.sql`.
+- Migraciones: `migrations/001_initial.sql`, `002_phase3.sql`, `003_phase4.sql`
+  y `004_phase5.sql`.
 - Runner: `src/persistence/database.ts`.
 - Tabla de control: `schema_migrations`.
-- Versión actual del esquema: **3** (Fase 3 añade `leases`, `worktrees` y `task_attempts`; Fase 4 añade `jury_runs`, `jury_consolidations` y `approved_modules`).
+- Version actual del esquema: **4**.
 
-La conexión usa `node:sqlite`, `PRAGMA foreign_keys=ON`, WAL para archivos,
+La conexion usa `node:sqlite`, `PRAGMA foreign_keys=ON`, WAL para archivos,
 `busy_timeout=5000` y transacciones `BEGIN IMMEDIATE` para escrituras.
 
 ## Tablas
 
-| Tabla                   | Propósito                          | Claves y restricciones principales                                              |
+| Tabla                   | Proposito                          | Claves y restricciones principales                                              |
 | ----------------------- | ---------------------------------- | ------------------------------------------------------------------------------- |
-| `projects`              | Proyecto y estado global           | PK `id`; `repo_path` único; CHECK de estado                                     |
-| `plans`                 | Planes versionados y hash aprobado | PK `id`; FK proyecto; único `(project_id, version)` y `(project_id, hash)`      |
-| `agents`                | Agentes y rol persistido           | PK `id`; FK proyecto; único `(project_id, opencode_agent_id)`                   |
-| `modules`               | Módulos y propietario              | PK `id`; FK proyecto/agente; único `(project_id, name)`                         |
-| `tasks`                 | Tareas y estado                    | PK `id`; FKs proyecto/plan/módulo/agente; priority 0–100; version optimista     |
-| `task_dependencies`     | DAG de tareas                      | PK `(task_id, depends_on_task_id)`; FKs; CHECK anti-auto-dependencia            |
-| `contracts`             | Contratos versionados              | PK `id`; FKs tarea/módulo; único `(task_id, version)` y `(task_id, hash)`       |
-| `module_versions`       | Versiones inmutables               | PK `id`; FK módulo; único `(module_id, version)` y `(module_id, artifact_hash)` |
-| `sessions`              | Sesiones OpenCode planificadas     | PK `id`; FKs proyecto/agente; `opencode_session_id` único cuando existe         |
-| `messages`              | Buzones persistentes               | PK `id`; FKs emisor/receptor; único `(project_id, idempotency_key)`             |
-| `reviews`               | Dictámenes de jueces               | PK `id`; FK `module_version`; único `(module_version_id, judge_role)`           |
-| `approvals`             | Aprobaciones humanas               | PK `id`; FK proyecto; único por sujeto/hash/aprobador                           |
-| `events`                | Log durable append-only            | PK `seq` autoincremental; `id` único; triggers bloquean UPDATE/DELETE           |
-| `event_outbox`          | Entrega externa con reintentos     | PK `id`; FK evento; único `(event_id, topic)`; estado/attempts                  |
-| `checkpoints`           | Recuperación de estado             | PK `id`; FK proyecto; scope/hash                                                |
-| `audit_log`             | Decisiones de autorización         | PK `id`; project opcional; triggers bloquean UPDATE/DELETE                      |
-| `temporary_permissions` | Grants temporales                  | PK `id`; FK proyecto; efecto allow/deny; expiración/revocación                  |
-| `leases`                | Lease activo por tarea             | PK `task_id`; intento, expiración y heartbeat                                   |
-| `worktrees`             | Worktree Git de una tarea          | PK `id`; FK tarea/módulo; path y branch únicos; estado                          |
-| `task_attempts`         | Intentos de ejecución              | PK `id`; FK tarea/sesión; único `(task_id, attempt)`; tiempos y error           |
-| `jury_runs`             | Ejecución de los cuatro jueces     | PK `id`; FK tarea/versión; único por `module_version_id`; ciclo                 |
-| `jury_consolidations`   | Veredicto determinista             | PK `id`; FK run/versión; único por versión; bloqueos/recomendaciones/faltantes  |
-| `approved_modules`      | Registro de módulos aprobados      | PK `id`; FKs módulo/versión/run; único `(module_id, module_version_id)`         |
+| `projects`              | Proyecto y estado global           | PK `id`; `repo_path` unico; CHECK de estado                                     |
+| `plans`                 | Planes versionados y hash aprobado | PK `id`; FK proyecto; unico `(project_id, version)` y `(project_id, hash)`      |
+| `agents`                | Agentes y rol persistido           | PK `id`; FK proyecto; unico `(project_id, opencode_agent_id)`                   |
+| `modules`               | Modulos y propietario              | PK `id`; FK proyecto/agente; unico `(project_id, name)`                         |
+| `tasks`                 | Tareas y estado                    | PK `id`; FKs; priority 0-100; `review_cycle`; version optimista                 |
+| `task_dependencies`     | DAG de tareas                      | PK `(task_id, depends_on_task_id)`; CHECK anti-auto-dependencia                 |
+| `contracts`             | Contratos versionados              | PK `id`; FKs tarea/modulo; unico `(task_id, version)` y `(task_id, hash)`       |
+| `module_versions`       | Versiones inmutables               | PK `id`; FK modulo; unico `(module_id, version)` y `(module_id, artifact_hash)` |
+| `sessions`              | Sesiones OpenCode                  | PK `id`; FKs proyecto/agente; `opencode_session_id` unico cuando existe         |
+| `messages`              | Buzones persistentes               | PK `id`; FKs; unico `(project_id, idempotency_key)`                             |
+| `reviews`               | Dictamenes de jueces               | PK `id`; FK version; unico `(module_version_id, judge_role)`                    |
+| `approvals`             | Aprobaciones humanas               | PK `id`; FK proyecto; unico por sujeto/hash/aprobador                           |
+| `events`                | Log durable append-only            | PK `seq`; `id` unico; triggers bloquean UPDATE/DELETE                           |
+| `event_outbox`          | Entrega externa con reintentos     | PK `id`; FK evento; unico `(event_id, topic)`                                   |
+| `checkpoints`           | Recuperacion de estado             | PK `id`; FK proyecto; scope/hash                                                |
+| `audit_log`             | Decisiones de autorizacion         | PK `id`; triggers bloquean UPDATE/DELETE                                        |
+| `temporary_permissions` | Grants temporales                  | PK `id`; FK proyecto; efecto allow/deny; expiracion                             |
+| `leases`                | Lease activo por tarea             | PK `task_id`; intento, expiracion y heartbeat                                   |
+| `worktrees`             | Worktree Git de una tarea          | PK `id`; FK tarea/modulo; path y branch unicos                                  |
+| `task_attempts`         | Intentos de ejecucion              | PK `id`; FK tarea/sesion; unico `(task_id, attempt)`                            |
+| `jury_runs`             | Ejecucion de los cuatro jueces     | PK `id`; FK tarea/version; unico por `module_version_id`; ciclo                 |
+| `jury_consolidations`   | Veredicto determinista             | PK `id`; FK run/version; unico por version                                      |
+| `approved_modules`      | Registro de modulos aprobados      | PK `id`; FKs modulo/version/run; unico `(module_id, module_version_id)`         |
+| `integration_runs`      | Intentos de integracion            | PK `id`; FK proyecto/plan; unico `(project, plan, input_hash, attempt)`         |
+| `integration_modules`   | Versiones exactas ensambladas      | PK `id`; FKs run/modulo/version/contrato; unico `(run, module)`                 |
+| `integration_adapters`  | Adaptadores versionados            | PK `id`; FK run/modulo; unico `(run, path)`; pruebas y revision JSON            |
+| `integration_conflicts` | Conflictos menores/estructurales   | PK `id`; FK run; tipo, evidencia, resolucion                                    |
+| `integration_manifests` | Manifiesto reproducible            | PK `id`; FK proyecto/plan/run; unico `(project, hash)` y `(run)`                |
+| `feedback_runs`         | Evaluacion global                  | PK `id`; FK proyecto/plan/manifest; unico `(manifest)`                          |
+| `final_deliveries`      | Entrega preparada/entregada        | PK `id`; FK proyecto/manifest/feedback; unico `(manifest)`                      |
 
 ## Relaciones principales
 
 ```text
 projects
-  ├── plans
-  ├── agents
-  │     ├── modules
-  │     └── sessions
-  ├── tasks ── task_dependencies
-  │     ├── contracts
-  │     └── messages
-  ├── modules ── module_versions ── reviews
-  ├── approvals
-  ├── events ── event_outbox
-  ├── checkpoints
-  ├── audit_log
-  ├── temporary_permissions
-  ├── leases
-  ├── worktrees ── module_versions ── reviews
-  └── task_attempts ── sessions
+  +-- plans
+  +-- agents
+  |     +-- modules
+  |     +-- sessions
+  +-- tasks +-- task_dependencies
+  |     +-- contracts
+  |     +-- messages
+  +-- modules +-- module_versions +-- reviews
+  +-- approvals
+  +-- events +-- event_outbox
+  +-- checkpoints
+  +-- audit_log
+  +-- temporary_permissions
+  +-- leases
+  +-- worktrees
+  +-- task_attempts +-- sessions
+  +-- jury_runs +-- jury_consolidations
+  +-- approved_modules
+  +-- integration_runs
+  |     +-- integration_modules
+  |     +-- integration_adapters
+  |     +-- integration_conflicts
+  |     +-- integration_manifests
+  +-- feedback_runs
+  +-- final_deliveries
 ```
 
 ## Invariantes
 
-- Un plan aprobado tiene hash inmutable; una aprobación se vincula a ese hash.
-- Una tarea no puede depender de sí misma.
-- El DAG se valida con detección de ciclos en la creación de tareas.
-- Una versión de módulo no se reutiliza por `artifact_hash`.
-- Un juez solo puede tener un dictamen por versión de módulo.
+- Un plan aprobado tiene hash inmutable; una aprobacion se vincula a ese hash.
+- Una tarea no puede depender de si misma; el DAG se valida con deteccion de ciclos.
+- Una version de modulo no se reutiliza por `artifact_hash`.
+- Un juez solo puede tener un dictamen por version de modulo.
 - Un mensaje duplicado por `idempotency_key` devuelve el mismo mensaje; si cambia
   el contenido, es un conflicto.
-- Cada evento durable se crea en la misma transacción que el cambio de estado y
+- Cada evento durable se crea en la misma transaccion que el cambio de estado y
   genera una fila de outbox.
-- Los eventos y la auditoría no se pueden modificar ni borrar.
+- Los eventos y la auditoria no se pueden modificar ni borrar.
 - Los mensajes son privados para su receptor; el estado compartido no los incluye.
 - Los secretos se redactan por clave y por patrones `password=`, `token:`,
   `authorization:`, etc.
+- Solo se integran versiones con `approved_modules` cuyo commit, tree y artifact
+  siguen coincidiendo con la version inmutable.
+- Un manifiesto se vincula a un input hash, plan, commit base y commit de
+  integracion.
+- Un adaptador solo puede escribir bajo `integration/adapters/` y no puede
+  modificar modulos aprobados.
+- Un fallo estructural no crea manifiesto.
+- Un `FAIL` de feedback no crea entrega final.
+- Una entrega final solo pasa a `DELIVERED` con feedback `PASS` y aprobacion
+  humana.
 
 ## Estados de tarea
 
@@ -91,30 +117,31 @@ Transiciones en `src/domain/transitions.ts`; el estado nunca se decide por el LL
 ## Eventos y outbox
 
 - `events.seq` es la secuencia durable por base.
-- Cada operación de escritura llama a `emit()` y crea evento + outbox en la misma
-  transacción.
+- Cada operacion de escritura llama a `emit()` y crea evento + outbox en la misma
+  transaccion.
 - `OutboxDispatcher` entrega con reintentos acotados; el handler debe ser
   idempotente.
 - Un fallo de entrega no revierte el evento, pero queda registrado con intentos y
   `last_error` redactado.
 
-## Autorización
+## Autorizacion
 
-`AuthorizationService` deniega por defecto y registra cada decisión en
+`AuthorizationService` deniega por defecto y registra cada decision en
 `audit_log`. El rol efectivo de un agente se vuelve a leer de `agents`; un token
 con rol manipulado se rechaza con `ROLE_STALE`.
 
 Roles principales:
 
-- `HUMAN`: plan, aprobaciones, inicio/pausa/cancelación de proyecto.
-- `PARENT`: propuesta de planes.
-- `COORDINATOR`: DAG, asignación, prioridad, pausa y contratos.
-- `SPECIALIST`: progreso y escritura de su módulo.
+- `HUMAN`: plan, aprobaciones, inicio/pausa/cancelacion de proyecto, finalizacion
+  de entrega.
+- `PARENT`: propuesta de planes y recepcion de entrega final.
+- `COORDINATOR`: DAG, asignacion, prioridad, pausa y contratos.
+- `SPECIALIST`: progreso y escritura de su modulo.
 - `JUDGE_*`: dictamen de su propio rol, sin escritura.
-- `INTEGRATOR`: integración autorizada.
+- `INTEGRATOR`: integracion autorizada.
 - `FEEDBACK`: veredicto global.
 
-## Consultas útiles
+## Consultas utiles
 
 ```sql
 SELECT id, name, status FROM projects;
@@ -122,4 +149,7 @@ SELECT seq, type, aggregate_type, aggregate_id FROM events ORDER BY seq DESC LIM
 SELECT actor_id, action, decision, reason FROM audit_log ORDER BY created_at DESC LIMIT 20;
 SELECT id, state, priority, owner_agent_id FROM tasks WHERE project_id = ?;
 SELECT id, status, event_id, attempts FROM event_outbox WHERE status = 'PENDING';
+SELECT id, status, input_hash, manifest_hash FROM integration_runs WHERE project_id = ?;
+SELECT id, verdict, manifest_id FROM feedback_runs WHERE project_id = ?;
+SELECT id, status, manifest_id FROM final_deliveries WHERE project_id = ?;
 ```

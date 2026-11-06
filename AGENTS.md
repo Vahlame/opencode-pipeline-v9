@@ -2,9 +2,15 @@
 
 ## Contexto
 
-Este repositorio implementa las fases 1, 2, 3 y 4 de **OpenCode Multiagent Orchestrator V9** sobre OpenCode V2. La Fase 1 aporta la base y la conexión real; la Fase 2 aporta SQLite, autorización, mensajería, eventos durables y outbox; la Fase 3 aporta scheduler DAG, worktrees Git, sesiones reales, ejecución paralela y leases; la Fase 4 aporta jurado independiente, consolidación determinista, rework y registro de módulos aprobados. La integración y el feedback completos pertenecen a fases posteriores.
+Este repositorio implementa las fases 1, 2, 3, 4 y 5 de **OpenCode Multiagent
+Orchestrator V9** sobre OpenCode V2. La Fase 1 aporta la base y la conexion real;
+la Fase 2 aporta SQLite, autorizacion, mensajeria, eventos durables y outbox; la
+Fase 3 aporta scheduler DAG, worktrees Git, sesiones reales, ejecucion paralela y
+leases; la Fase 4 aporta jurado independiente, consolidacion determinista, rework
+y registro de modulos aprobados; la Fase 5 aporta integracion hibrida,
+adaptadores, manifiesto reproducible, feedback global y entrega final.
 
-## Comandos de verificación
+## Comandos de verificacion
 
 Antes de declarar terminado un cambio:
 
@@ -14,44 +20,48 @@ npm run build
 npm run db:migrate
 ```
 
-Para comprobar la conexión real con OpenCode V2:
+Para comprobar la conexion real con OpenCode V2:
 
 ```powershell
 npm run doctor
 npm run smoke
 ```
 
-No ejecutes `npm run test:real` en CI ni sin intención explícita: consume tokens.
+No ejecutes `npm run test:real` en CI ni sin intencion explicita: consume tokens.
 
 ## Arquitectura
 
 - `src/domain/`: tipos, esquemas Zod, IDs y transiciones.
 - `src/opencode/`: interfaz `OpenCodeAdapter`, runtime HTTP, SDK y mock.
-- `src/config/`: variables de entorno y validación.
-- `src/cli.ts`, `src/cli/phase2.ts`: comandos locales.
+- `src/config/`: variables de entorno y validacion.
+- `src/cli.ts`, `src/cli/phase2.ts` ... `src/cli/phase5.ts`: comandos locales.
 - `src/persistence/`: SQLite, migraciones y repositorios.
-- `src/auth/`: tokens HMAC y autorización.
+- `src/auth/`: tokens HMAC y autorizacion.
 - `src/orchestrator/`: servicios de planes, tareas, mensajes y estado.
 - `src/api/`: API HTTP interna local.
 - `src/outbox/`: entrega de eventos con reintentos.
-- `src/worktrees/`: aislamiento Git, validación de rutas y commits.
-- `src/sessions/`: sesiones OpenCode, prompts, espera e interrupción.
-- `src/orchestrator/scheduler.ts`, `task-executor.ts`: DAG, leases y ejecución real.
-- `src/jury/`: jueces, consolidación determinista y rework.
-- `.worktrees/`: worktrees de demostración y snapshots de jurado, ignorados por Git.
+- `src/worktrees/`: aislamiento Git, validacion de rutas y commits deterministas.
+- `src/sessions/`: sesiones OpenCode, prompts, espera e interrupcion.
+- `src/orchestrator/scheduler.ts`, `task-executor.ts`: DAG, leases y ejecucion real.
+- `src/jury/`: jueces, consolidacion determinista y rework.
+- `src/integration/`: `IntegrationManager`, workspace Git, manifiesto,
+  `FeedbackService`, `DeliveryService` y agentes de feedback.
+- `.worktrees/`: worktrees de tareas, integraciones y snapshots, ignorados por Git.
 - `.opencode/agents/`: perfiles V2 en Markdown.
 - `.opencode/skills/`: instrucciones compartidas.
 - `docs/`: decisiones, alcance y esquema.
 
-No importes `@opencode/client` ni `@opencode/sdk` fuera de `src/opencode/`. El resto del sistema debe depender de `OpenCodeAdapter`.
+No importes `@opencode/client` ni `@opencode/sdk` fuera de `src/opencode/`. El resto
+del sistema debe depender de `OpenCodeAdapter`.
 
-## Persistencia y autorización
+## Persistencia y autorizacion
 
-- Toda mutación de estado debe generar evento y outbox en la misma transacción.
+- Toda mutacion de estado debe generar evento y outbox en la misma transaccion.
 - Usa `BEGIN IMMEDIATE`; no anides transacciones.
 - Los eventos y `audit_log` son append-only.
-- No confíes en roles declarados en prompts o mensajes; usa `AuthorizationService`.
-- Los mensajes son privados para su receptor; no los incluyas en el estado compartido.
+- No confies en roles declarados en prompts o mensajes; usa `AuthorizationService`.
+- Los mensajes son privados para su receptor; no los incluyas en el estado
+  compartido.
 - No registres secretos en payloads, eventos, logs ni respuestas.
 - Los tokens se emiten con `auth:issue` solo desde el entorno administrativo; no
   los incluyas en prompts ni repositorio.
@@ -60,32 +70,62 @@ No importes `@opencode/client` ni `@opencode/sdk` fuera de `src/opencode/`. El r
 - Un worktree por tarea; nunca compartas un directorio de escritura.
 - El scheduler solo ejecuta con plan aprobado y proyecto `RUNNING`.
 - `ORCH_AGENT_MODEL` debe tener `capabilities.tools=true`.
-- No borres worktrees sucios sin autorización humana.
-- Los jueces son de solo lectura; no pueden editar, ejecutar shell ni cambiar contratos.
-- Un dictamen ausente no es aprobación; el consolidador es determinista.
-- Una aprobación se vincula a la versión y al commit; no se hereda a versiones nuevas.
-- `ORCH_MAX_REWORK_CYCLES` limita los ciclos de corrección.
+- No borres worktrees sucios sin autorizacion humana.
+- Los jueces son de solo lectura; no pueden editar, ejecutar shell ni cambiar
+  contratos.
+- Un dictamen ausente no es aprobacion; el consolidador es determinista.
+- Una aprobacion se vincula a la version y al commit; no se hereda a versiones
+  nuevas.
+- `ORCH_MAX_REWORK_CYCLES` limita los ciclos de correccion.
+
+## Integracion y feedback
+
+- Solo se integran versiones registradas en `approved_modules`, con commit, tree
+  y artifact hash vigentes.
+- El integrador no puede modificar modulos aprobados ni hacer merges destructivos.
+- Los adaptadores viven bajo `integration/adapters/`, se prueban y se registran
+  con version, commit, hash y revision.
+- Una incompatibilidad estructural genera un informe al coordinador y no crea
+  manifiesto.
+- El manifiesto incluye plan, commit base, modulos, contratos, adaptadores,
+  pruebas, conflictos y hashes reproducibles.
+- Un fallo de integracion no crea entrega final.
+- `FeedbackService` es de solo lectura sobre el snapshot integrado.
+- Un criterio obligatorio `PASS` sin evidencia no autoriza la entrega.
+- Un feedback ausente, invalido o `FAIL` no crea entrega final.
+- La entrega final solo pasa a `DELIVERED` con feedback `PASS` y aprobacion
+  humana.
+- El padre no puede declarar finalizado el proyecto sin aprobacion global y
+  evidencia.
+- `ORCH_INTEGRATION_TIMEOUT_MS` y `ORCH_FEEDBACK_TIMEOUT_MS` limitan las
+  operaciones.
 
 ## OpenCode V2
 
-- Usa `agents`, `permissions` y `policies`; no uses campos V1 como `permission`, `bash`, `task`, `temperature` o `maxSteps`.
-- Los perfiles son `mode: primary` porque el orquestador los lanza como sesiones independientes.
+- Usa `agents`, `permissions` y `policies`; no uses campos V1 como `permission`,
+  `bash`, `task`, `temperature` o `maxSteps`.
+- Los perfiles son `mode: primary` porque el orquestador los lanza como sesiones
+  independientes.
 - No agregues subagentes ni shell libre a los agentes.
-- No modifiques la configuración global de OpenCode ni la instalación V1.
+- No modifiques la configuracion global de OpenCode ni la instalacion V1.
 - La app de OpenCode Desktop usa V2.2.5; el `opencode` del `PATH` puede ser V1.
 
 ## Seguridad
 
-- La autorización efectiva pertenece al orquestador, no al prompt.
-- Denegación por defecto.
-- Sin shell, sin `.env`, sin `.git`, sin rutas externas y sin escritura fuera del módulo asignado.
-- No incluyas secretos en eventos, logs, mensajes, pruebas ni documentación.
-- No hagas pushes, despliegues, borrados irreversibles ni cambios de credenciales sin autorización humana.
+- La autorizacion efectiva pertenece al orquestador, no al prompt.
+- Denegacion por defecto.
+- Sin shell, sin `.env`, sin `.git`, sin rutas externas y sin escritura fuera del
+  modulo asignado.
+- No incluyas secretos en eventos, logs, mensajes, pruebas ni documentacion.
+- No hagas pushes, despliegues, borrados irreversibles ni cambios de credenciales
+  sin autorizacion humana.
+- Los adaptadores no pueden ocultar errores estructurales ni alterar la logica de
+  los modulos aprobados.
 
 ## Formato de trabajo
 
-- Cambios pequeños y verificables.
-- Pruebas unitarias e integración con mocks para CI.
+- Cambios pequenos y verificables.
+- Pruebas unitarias e integracion con mocks para CI.
 - La prueba real con OpenCode es opt-in.
-- No afirmes que una prueba pasó si no la ejecutaste.
+- No afirmes que una prueba paso si no la ejecutaste.
 - Documenta supuestos y limitaciones.

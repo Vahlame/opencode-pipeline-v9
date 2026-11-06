@@ -8,7 +8,7 @@ describe('SQLite persistence', () => {
   it('applies migrations and creates the required tables', () => {
     const store = SqliteStore.open(':memory:')
     try {
-      expect(store.schemaVersion).toBe(3)
+      expect(store.schemaVersion).toBe(4)
       const tables = store.db
         .all<{ name: string }>("SELECT name FROM sqlite_master WHERE type = 'table'")
         .map((row) => row.name)
@@ -36,6 +36,13 @@ describe('SQLite persistence', () => {
         'jury_runs',
         'jury_consolidations',
         'approved_modules',
+        'integration_runs',
+        'integration_modules',
+        'integration_adapters',
+        'integration_conflicts',
+        'integration_manifests',
+        'feedback_runs',
+        'final_deliveries',
       ]) {
         expect(tables).toContain(table)
       }

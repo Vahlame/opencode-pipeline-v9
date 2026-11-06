@@ -26,6 +26,12 @@ export interface WorktreeCommitResult {
   readonly filesChanged: readonly string[]
 }
 
+export interface WorktreeCommitOptions {
+  readonly timestamp?: string
+  readonly authorName?: string
+  readonly authorEmail?: string
+}
+
 export interface TestCommandResult {
   readonly command: string
   readonly passed: boolean
@@ -35,12 +41,12 @@ export interface TestCommandResult {
   readonly durationMs: number
 }
 
-function git(cwd: string, args: readonly string[]): string {
+function git(cwd: string, args: readonly string[], env: NodeJS.ProcessEnv = process.env): string {
   const result = spawnSync('git', [...args], {
     cwd,
     encoding: 'utf8',
     windowsHide: true,
-    env: process.env,
+    env,
   })
   if (result.error) throw new WorktreeError('GIT_FAILED', result.error.message)
   if (result.status !== 0) {
@@ -129,6 +135,34 @@ export class WorktreeManager {
     return { path: canonicalPath, branch: 'detached', baseCommit: commitSha }
   }
 
+  createIntegration(name: string, baseCommit: string): WorktreeRecord {
+    if (!/^[A-Za-z0-9_-]+$/.test(name)) {
+      throw new WorktreeError('INVALID_INTEGRATION_ID', `Unsafe integration id: ${name}`)
+    }
+    const integrationsRoot = join(this.worktreeRoot, 'integrations')
+    mkdirSync(integrationsRoot, { recursive: true })
+    const path = join(integrationsRoot, name)
+    if (existsSync(path)) {
+      throw new WorktreeError('INTEGRATION_EXISTS', `Integration workspace already exists: ${path}`)
+    }
+    git(this.repoRoot, ['worktree', 'add', '--detach', path, baseCommit])
+    const canonicalPath = realpathSync.native(path)
+    this.assertInsideRoot(canonicalPath)
+    return { path: canonicalPath, branch: 'detached', baseCommit }
+  }
+
+  resolveCommit(ref: string): string {
+    return git(this.repoRoot, ['rev-parse', ref])
+  }
+
+  treeOfCommit(ref: string): string {
+    return git(this.repoRoot, ['rev-parse', `${ref}^{tree}`])
+  }
+
+  treeAtPath(ref: string, path: string): string {
+    return git(this.repoRoot, ['rev-parse', `${ref}:${path}`])
+  }
+
   list(): WorktreeRecord[] {
     const output = git(this.repoRoot, ['worktree', 'list', '--porcelain'])
     const records: WorktreeRecord[] = []
@@ -192,7 +226,12 @@ export class WorktreeManager {
     return results
   }
 
-  commit(path: string, allowedPaths: readonly string[], message: string): WorktreeCommitResult {
+  commit(
+    path: string,
+    allowedPaths: readonly string[],
+    message: string,
+    options: WorktreeCommitOptions = {},
+  ): WorktreeCommitResult {
     const changed = this.validateChangedPaths(path, allowedPaths)
     if (changed.length === 0) {
       throw new WorktreeError('EMPTY_DELIVERY', 'The specialist did not change any allowed file')
@@ -200,18 +239,30 @@ export class WorktreeManager {
     git(path, ['add', '--all', '--', ...changed])
     const staged = git(path, ['diff', '--cached', '--name-only', '-z']).split('\0').filter(Boolean)
     for (const file of staged) this.assertAllowedFile(path, normalizeSlashes(file), allowedPaths)
-    git(path, [
-      '-c',
-      'user.name=OpenCode Orchestrator',
-      '-c',
-      'user.email=orchestrator@local',
-      '-c',
-      `core.hooksPath=${this.emptyHooksPath}`,
-      'commit',
-      '--no-verify',
-      '-m',
-      message,
-    ])
+    const authorName = options.authorName ?? 'OpenCode Orchestrator'
+    const authorEmail = options.authorEmail ?? 'orchestrator@local'
+    const env = {
+      ...process.env,
+      ...(options.timestamp
+        ? { GIT_AUTHOR_DATE: options.timestamp, GIT_COMMITTER_DATE: options.timestamp, TZ: 'UTC' }
+        : {}),
+    }
+    git(
+      path,
+      [
+        '-c',
+        `user.name=${authorName}`,
+        '-c',
+        `user.email=${authorEmail}`,
+        '-c',
+        `core.hooksPath=${this.emptyHooksPath}`,
+        'commit',
+        '--no-verify',
+        '-m',
+        message,
+      ],
+      env,
+    )
     const commitSha = git(path, ['rev-parse', 'HEAD'])
     const treeHash = git(path, ['rev-parse', 'HEAD^{tree}'])
     return {

@@ -6,6 +6,7 @@ import { TokenError } from '../auth/tokens.js'
 import { AuthorizationError } from '../auth/authorization.js'
 import { OrchestratorError } from '../orchestrator/errors.js'
 import type { MessageId, PlanId, ProjectId } from '../domain/ids.js'
+import { DeliveryService } from '../integration/feedback.js'
 import type { AppContext } from '../app/context.js'
 
 export interface ApiServerOptions {
@@ -195,6 +196,30 @@ export async function startApiServer(
         sendJson(response, 200, context.store.listApprovedModules(id))
         return
       }
+      if (method === 'GET' && path === '/api/integrations') {
+        const id = requireProject(projectId)
+        context.authz.require(principal, 'integration.read', { type: 'project', id })
+        sendJson(response, 200, context.store.listIntegrationRuns(id))
+        return
+      }
+      if (method === 'GET' && path === '/api/integrations/manifests') {
+        const id = requireProject(projectId)
+        context.authz.require(principal, 'integration.read', { type: 'project', id })
+        sendJson(response, 200, context.store.listIntegrationManifests(id))
+        return
+      }
+      if (method === 'GET' && path === '/api/feedback') {
+        const id = requireProject(projectId)
+        context.authz.require(principal, 'feedback.read', { type: 'project', id })
+        sendJson(response, 200, context.store.listFeedbackRuns(id))
+        return
+      }
+      if (method === 'GET' && path === '/api/deliveries') {
+        const id = requireProject(projectId)
+        context.authz.require(principal, 'delivery.read', { type: 'project', id })
+        sendJson(response, 200, context.store.listFinalDeliveries(id))
+        return
+      }
       if (method === 'GET' && path === '/api/audit') {
         sendJson(response, 200, context.service.listAudit(principal, requireProject(projectId)))
         return
@@ -265,6 +290,13 @@ export async function startApiServer(
       const startMatch = /^\/api\/projects\/([^/]+)\/start$/.exec(path)
       if (method === 'POST' && startMatch?.[1]) {
         sendJson(response, 200, context.service.startProject(principal, startMatch[1] as ProjectId))
+        return
+      }
+
+      const finalizeDeliveryMatch = /^\/api\/deliveries\/([^/]+)\/finalize$/.exec(path)
+      if (method === 'POST' && finalizeDeliveryMatch?.[1]) {
+        const service = new DeliveryService(context.store, context.authz)
+        sendJson(response, 200, service.finalize(principal, finalizeDeliveryMatch[1]))
         return
       }
 

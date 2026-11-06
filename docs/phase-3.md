@@ -65,18 +65,20 @@ Resultado real con el servidor V2.2.5 y el modelo
   "worktrees": 2,
   "results": [
     {
-      "task": "tsk_fbaa...",
+      "task": "tsk_76b36...",
       "status": "SUCCEEDED",
-      "commit": "ca0bc7fd7ec1d8b11f333ea2ff5abfc104dc053d"
+      "commit": "85e245a6a28a38d03bf98943aa0ee337728bc96c"
     },
     {
-      "task": "tsk_06ce...",
+      "task": "tsk_12f15...",
       "status": "SUCCEEDED",
-      "commit": "83fccf59203e6dbf14f3a3e73ec5860486b46ae4"
+      "commit": "24fc2f145d973c48b59535e4652dd9b30d5f307d"
     }
   ],
   "concurrentOverlap": true,
   "dependentTaskState": "PENDING",
+  "unauthorizedContractDenied": true,
+  "rejectedOperations": 1,
   "events": 39
 }
 ```
@@ -84,29 +86,29 @@ Resultado real con el servidor V2.2.5 y el modelo
 Worktrees generados:
 
 ```text
-.worktrees/tsk_fbaa1fdbf75f4fbea5bea26ae9868def
-  branch: orch/task/tsk_fbaa1fdbf75f4fbea5bea26ae9868def
-  commit: ca0bc7fd7ec1d8b11f333ea2ff5abfc104dc053d
+.worktrees/tsk_76b36c31332d4b5581915de493b02cb6
+  branch: orch/task/tsk_76b36c31332d4b5581915de493b02cb6
+  commit: 85e245a6a28a38d03bf98943aa0ee337728bc96c
   paths: modules/frontend/demo.mjs, modules/frontend/demo.test.mjs
 
-.worktrees/tsk_06ce9ec217d24e0db4d87a25cc7cdc3c
-  branch: orch/task/tsk_06ce9ec217d24e0db4d87a25cc7cdc3c
-  commit: 83fccf59203e6dbf14f3a3e73ec5860486b46ae4
+.worktrees/tsk_12f150aea11b40feb77b8965bd6d9423
+  branch: orch/task/tsk_12f150aea11b40feb77b8965bd6d9423
+  commit: 24fc2f145d973c48b59535e4652dd9b30d5f307d
   paths: modules/backend/demo.mjs, modules/backend/demo.test.mjs
 ```
 
 Los commits no contienen escrituras cruzadas:
 
 ```text
-ca0bc7f -> modules/frontend/demo.mjs, modules/frontend/demo.test.mjs
-83fccf5 -> modules/backend/demo.mjs, modules/backend/demo.test.mjs
+85e245a -> modules/frontend/demo.mjs, modules/frontend/demo.test.mjs
+24fc2f1 -> modules/backend/demo.mjs, modules/backend/demo.test.mjs
 ```
 
 Intervalos reales de ejecución:
 
 ```text
-Task A: 2026-11-06T15:29:23.862Z -> 2026-11-06T15:29:34.398Z
-Task B: 2026-11-06T15:29:23.863Z -> 2026-11-06T15:29:33.308Z
+Task A: 2026-11-06T15:35:10.959Z -> 2026-11-06T15:35:22.803Z
+Task B: 2026-11-06T15:35:10.960Z -> 2026-11-06T15:35:21.552Z
 ```
 
 Ambos intervalos se solapan; las sesiones fueron distintas y los worktrees
@@ -139,6 +141,8 @@ en `IN_REVIEW`, no `APPROVED`.
   OpenCode, para controlar ruta, rama, validación y commit.
 - La demo real usó el servidor V2 de la app y el modelo gratuito porque el
   proveedor de pago devolvió `Insufficient account funds`.
+- Un especialista intentó crear un contrato y fue denegado; la denegación quedó
+  en `audit_log` y `rejected` la muestra.
 - La identidad de agente dentro de OpenCode sigue siendo por sesión/perfil, pero
   las herramientas del orquestador no se exponen todavía a los agentes. El
   orquestador ejecuta tests y crea commits; el agente solo edita archivos.

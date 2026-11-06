@@ -111,6 +111,24 @@ export class WorktreeManager {
     return { path: canonicalPath, branch, baseCommit }
   }
 
+  createDetached(name: string, commitSha: string): WorktreeRecord {
+    if (!/^[A-Za-z0-9_-]+$/.test(name)) {
+      throw new WorktreeError('INVALID_REVIEW_ID', `Unsafe review id: ${name}`)
+    }
+    const reviewsRoot = join(this.worktreeRoot, 'reviews')
+    mkdirSync(reviewsRoot, { recursive: true })
+    const path = join(reviewsRoot, name)
+    if (existsSync(path)) {
+      const canonical = realpathSync.native(path)
+      this.assertInsideRoot(canonical)
+      return { path: canonical, branch: 'detached', baseCommit: commitSha }
+    }
+    git(this.repoRoot, ['worktree', 'add', '--detach', path, commitSha])
+    const canonicalPath = realpathSync.native(path)
+    this.assertInsideRoot(canonicalPath)
+    return { path: canonicalPath, branch: 'detached', baseCommit: commitSha }
+  }
+
   list(): WorktreeRecord[] {
     const output = git(this.repoRoot, ['worktree', 'list', '--porcelain'])
     const records: WorktreeRecord[] = []

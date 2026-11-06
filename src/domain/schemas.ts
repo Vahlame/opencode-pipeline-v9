@@ -93,6 +93,7 @@ export const TaskSchema = z.object({
   contractId: ContractIdSchema.optional(),
   attemptCount: z.number().int().nonnegative(),
   maxAttempts: z.number().int().positive(),
+  reviewCycle: z.number().int().nonnegative().default(0),
   leaseExpiresAt: TimestampSchema.optional(),
   createdAt: TimestampSchema,
   updatedAt: TimestampSchema,
@@ -191,6 +192,7 @@ export const FindingSchema = z.object({
   id: NonEmptyStringSchema,
   severity: ReviewSeveritySchema,
   message: NonEmptyStringSchema,
+  category: NonEmptyStringSchema.optional(),
   criterion: NonEmptyStringSchema.optional(),
   evidence: z.array(NonEmptyStringSchema).default([]),
 })

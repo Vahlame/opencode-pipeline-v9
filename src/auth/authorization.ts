@@ -66,6 +66,8 @@ export type Action =
   | 'review.read'
   | 'approval.create'
   | 'approval.read'
+  | 'jury.run'
+  | 'jury.read'
   | 'event.read'
   | 'state.read'
   | 'audit.read'
@@ -141,6 +143,7 @@ const READ_ACTIONS = new Set<Action>([
   'session.read',
   'review.read',
   'approval.read',
+  'jury.read',
   'event.read',
   'state.read',
   'audit.read',
@@ -160,6 +163,7 @@ const COORDINATOR_ACTIONS = new Set<Action>([
   'module.create',
   'checkpoint.write',
   'session.interrupt',
+  'jury.run',
   'temporary_permission.grant',
 ])
 
@@ -179,6 +183,7 @@ const HUMAN_ACTIONS = new Set<Action>([
   'contract.approve',
   'checkpoint.write',
   'session.interrupt',
+  'jury.run',
   'temporary_permission.grant',
 ])
 

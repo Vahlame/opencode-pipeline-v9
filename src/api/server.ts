@@ -177,6 +177,24 @@ export async function startApiServer(
         )
         return
       }
+      if (method === 'GET' && path === '/api/jury/runs') {
+        const id = requireProject(projectId)
+        context.authz.require(principal, 'jury.read', { type: 'project', id })
+        sendJson(response, 200, context.store.listJuryRuns(id))
+        return
+      }
+      if (method === 'GET' && path === '/api/jury/consolidations') {
+        const id = requireProject(projectId)
+        context.authz.require(principal, 'jury.read', { type: 'project', id })
+        sendJson(response, 200, context.store.listConsolidations(id))
+        return
+      }
+      if (method === 'GET' && path === '/api/jury/approved') {
+        const id = requireProject(projectId)
+        context.authz.require(principal, 'jury.read', { type: 'project', id })
+        sendJson(response, 200, context.store.listApprovedModules(id))
+        return
+      }
       if (method === 'GET' && path === '/api/audit') {
         sendJson(response, 200, context.service.listAudit(principal, requireProject(projectId)))
         return

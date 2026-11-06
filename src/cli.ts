@@ -10,6 +10,7 @@ import { runOpenCodeSmoke } from './opencode/smoke.js'
 import type { OpenCodeAdapter } from './opencode/adapter.js'
 import { registerPhase2Commands } from './cli/phase2.js'
 import { registerPhase3Commands } from './cli/phase3.js'
+import { registerPhase4Commands } from './cli/phase4.js'
 import { SqliteStore } from './persistence/store.js'
 
 loadDotEnv({ quiet: true })
@@ -75,6 +76,9 @@ async function runDoctor(config: AppConfig): Promise<void> {
     sessions: store.countTable('sessions'),
     worktrees: store.countTable('worktrees'),
     attempts: store.countTable('task_attempts'),
+    juryRuns: store.countTable('jury_runs'),
+    consolidations: store.countTable('jury_consolidations'),
+    approvedModules: store.countTable('approved_modules'),
   }
   store.close()
 
@@ -82,10 +86,15 @@ async function runDoctor(config: AppConfig): Promise<void> {
     const health = await adapter.health()
     const agents = health.ok ? await adapter.listAgents({ directory: config.projectDir }) : []
     const report = {
-      phase: 3,
+      phase: 4,
       node: process.version,
       authSecretConfigured: Boolean(config.ORCH_AUTH_SECRET),
-      db,
+      db: {
+        ...db,
+        juryRuns: db.juryRuns,
+        consolidations: db.consolidations,
+        approvedModules: db.approvedModules,
+      },
       platform: `${process.platform}/${process.arch}`,
       projectDir: config.projectDir,
       runtime: config.OPENCODE_RUNTIME,
@@ -164,7 +173,7 @@ const program = new Command()
 program
   .name('orch')
   .description('OpenCode Multiagent Orchestrator V9 - Fase 2 (núcleo persistente)')
-  .version('0.3.0')
+  .version('0.4.0')
 
 program
   .command('doctor')
@@ -195,6 +204,7 @@ program
 
 registerPhase2Commands(program)
 registerPhase3Commands(program)
+registerPhase4Commands(program)
 
 program.parseAsync(process.argv).catch((error: unknown) => {
   const message = error instanceof Error ? error.message : String(error)

@@ -2,7 +2,7 @@
 
 ## Contexto
 
-Este repositorio implementa las fases 1, 2 y 3 de **OpenCode Multiagent Orchestrator V9** sobre OpenCode V2. La Fase 1 aporta la base y la conexión real; la Fase 2 aporta SQLite, autorización, mensajería, eventos durables y outbox; la Fase 3 aporta scheduler DAG, worktrees Git, sesiones reales, ejecución paralela y leases. El jurado, la integración y el feedback completos pertenecen a fases posteriores.
+Este repositorio implementa las fases 1, 2, 3 y 4 de **OpenCode Multiagent Orchestrator V9** sobre OpenCode V2. La Fase 1 aporta la base y la conexión real; la Fase 2 aporta SQLite, autorización, mensajería, eventos durables y outbox; la Fase 3 aporta scheduler DAG, worktrees Git, sesiones reales, ejecución paralela y leases; la Fase 4 aporta jurado independiente, consolidación determinista, rework y registro de módulos aprobados. La integración y el feedback completos pertenecen a fases posteriores.
 
 ## Comandos de verificación
 
@@ -37,7 +37,8 @@ No ejecutes `npm run test:real` en CI ni sin intención explícita: consume toke
 - `src/worktrees/`: aislamiento Git, validación de rutas y commits.
 - `src/sessions/`: sesiones OpenCode, prompts, espera e interrupción.
 - `src/orchestrator/scheduler.ts`, `task-executor.ts`: DAG, leases y ejecución real.
-- `.worktrees/`: worktrees de demostración, ignorados por Git.
+- `src/jury/`: jueces, consolidación determinista y rework.
+- `.worktrees/`: worktrees de demostración y snapshots de jurado, ignorados por Git.
 - `.opencode/agents/`: perfiles V2 en Markdown.
 - `.opencode/skills/`: instrucciones compartidas.
 - `docs/`: decisiones, alcance y esquema.
@@ -60,6 +61,10 @@ No importes `@opencode/client` ni `@opencode/sdk` fuera de `src/opencode/`. El r
 - El scheduler solo ejecuta con plan aprobado y proyecto `RUNNING`.
 - `ORCH_AGENT_MODEL` debe tener `capabilities.tools=true`.
 - No borres worktrees sucios sin autorización humana.
+- Los jueces son de solo lectura; no pueden editar, ejecutar shell ni cambiar contratos.
+- Un dictamen ausente no es aprobación; el consolidador es determinista.
+- Una aprobación se vincula a la versión y al commit; no se hereda a versiones nuevas.
+- `ORCH_MAX_REWORK_CYCLES` limita los ciclos de corrección.
 
 ## OpenCode V2
 

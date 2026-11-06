@@ -137,6 +137,7 @@ function toTask(row: DbRow): Task {
     description: text(row, 'description'),
     state: text(row, 'state') as Task['state'],
     priority: integer(row, 'priority'),
+    reviewCycle: integer(row, 'review_cycle'),
     ...(optionalText(row, 'owner_agent_id')
       ? { ownerAgentId: optionalText(row, 'owner_agent_id') as AgentId }
       : {}),
@@ -330,6 +331,49 @@ function toTaskAttempt(row: DbRow): TaskAttemptRecord {
   }
 }
 
+function toJuryRun(row: DbRow): JuryRunRecord {
+  return {
+    id: text(row, 'id'),
+    projectId: text(row, 'project_id') as ProjectId,
+    taskId: text(row, 'task_id') as TaskId,
+    moduleVersionId: text(row, 'module_version_id') as ModuleVersionId,
+    status: text(row, 'status') as JuryRunRecord['status'],
+    cycle: integer(row, 'cycle'),
+    startedAt: text(row, 'started_at'),
+    ...(optionalText(row, 'completed_at')
+      ? { completedAt: optionalText(row, 'completed_at') }
+      : {}),
+    createdAt: text(row, 'created_at'),
+  }
+}
+
+function toConsolidation(row: DbRow): ConsolidationRecord {
+  return {
+    id: text(row, 'id'),
+    juryRunId: text(row, 'jury_run_id'),
+    moduleVersionId: text(row, 'module_version_id') as ModuleVersionId,
+    verdict: text(row, 'verdict') as ConsolidationRecord['verdict'],
+    blocking: json(row, 'blocking_json'),
+    recommendations: json(row, 'recommendations_json'),
+    missingRoles: json(row, 'missing_roles_json'),
+    hash: text(row, 'hash'),
+    createdAt: text(row, 'created_at'),
+  }
+}
+
+function toApprovedModule(row: DbRow): ApprovedModuleRecord {
+  return {
+    id: text(row, 'id'),
+    projectId: text(row, 'project_id') as ProjectId,
+    moduleId: text(row, 'module_id') as ModuleId,
+    moduleVersionId: text(row, 'module_version_id') as ModuleVersionId,
+    commitSha: text(row, 'commit_sha'),
+    artifactHash: text(row, 'artifact_hash'),
+    approvedAt: text(row, 'approved_at'),
+    juryRunId: text(row, 'jury_run_id'),
+  }
+}
+
 function toAuditEntry(row: DbRow): AuditEntry {
   return {
     id: text(row, 'id') as AuditId,
@@ -390,6 +434,7 @@ export interface CreateTaskRecord {
   readonly priority?: number
   readonly ownerAgentId?: AgentId
   readonly maxAttempts?: number
+  readonly reviewCycle?: number
 }
 
 export interface CreateContractRecord {
@@ -510,6 +555,41 @@ export interface WorktreeRecord {
   readonly status: 'ACTIVE' | 'COMMITTED' | 'FAILED' | 'REMOVED'
   readonly createdAt: string
   readonly updatedAt: string
+}
+
+export interface JuryRunRecord {
+  readonly id: string
+  readonly projectId: ProjectId
+  readonly taskId: TaskId
+  readonly moduleVersionId: ModuleVersionId
+  readonly status: 'RUNNING' | 'COMPLETED' | 'FAILED'
+  readonly cycle: number
+  readonly startedAt: string
+  readonly completedAt?: string
+  readonly createdAt: string
+}
+
+export interface ConsolidationRecord {
+  readonly id: string
+  readonly juryRunId: string
+  readonly moduleVersionId: ModuleVersionId
+  readonly verdict: 'APPROVED' | 'REWORK_REQUIRED' | 'INCOMPLETE'
+  readonly blocking: unknown[]
+  readonly recommendations: unknown[]
+  readonly missingRoles: string[]
+  readonly hash: string
+  readonly createdAt: string
+}
+
+export interface ApprovedModuleRecord {
+  readonly id: string
+  readonly projectId: ProjectId
+  readonly moduleId: ModuleId
+  readonly moduleVersionId: ModuleVersionId
+  readonly commitSha: string
+  readonly artifactHash: string
+  readonly approvedAt: string
+  readonly juryRunId: string
 }
 
 export interface TaskAttemptRecord {
@@ -743,8 +823,8 @@ export class SqliteStore {
     this.db.run(
       `INSERT INTO tasks
         (id, project_id, plan_id, module_id, title, description, state, priority, owner_agent_id,
-         attempt_count, max_attempts, created_at, updated_at, version)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, 0)`,
+         attempt_count, max_attempts, review_cycle, created_at, updated_at, version)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, 0)`,
       [
         id,
         record.projectId,
@@ -756,6 +836,7 @@ export class SqliteStore {
         record.priority ?? 50,
         record.ownerAgentId ?? null,
         record.maxAttempts ?? 3,
+        record.reviewCycle ?? 0,
         timestamp,
         timestamp,
       ],
@@ -936,6 +1017,20 @@ export class SqliteStore {
         [projectId],
       )
       .map(toWorktree)
+  }
+
+  updateModuleStatus(id: ModuleId, status: Module['status']): Module {
+    this.db.run('UPDATE modules SET status = ?, updated_at = ? WHERE id = ?', [
+      status,
+      nowIso(),
+      id,
+    ])
+    return this.getModule(id)!
+  }
+
+  updateModuleVersionStatus(id: ModuleVersionId, status: ModuleVersion['status']): ModuleVersion {
+    this.db.run('UPDATE module_versions SET status = ? WHERE id = ?', [status, id])
+    return this.getModuleVersion(id)!
   }
 
   updateWorktreeStatus(id: string, status: WorktreeRecord['status']): WorktreeRecord {
@@ -1270,6 +1365,157 @@ export class SqliteStore {
         moduleVersionId,
       ])
       .map(toReview)
+  }
+
+  createJuryRun(record: {
+    readonly projectId: ProjectId
+    readonly taskId: TaskId
+    readonly moduleVersionId: ModuleVersionId
+    readonly cycle: number
+  }): JuryRunRecord {
+    const id = createId('jur')
+    const timestamp = nowIso()
+    this.db.run(
+      `INSERT INTO jury_runs
+        (id, project_id, task_id, module_version_id, status, cycle, started_at, created_at)
+       VALUES (?, ?, ?, ?, 'RUNNING', ?, ?, ?)`,
+      [
+        id,
+        record.projectId,
+        record.taskId,
+        record.moduleVersionId,
+        record.cycle,
+        timestamp,
+        timestamp,
+      ],
+    )
+    return this.getJuryRun(id)!
+  }
+
+  getJuryRun(id: string): JuryRunRecord | undefined {
+    const row = this.db.get<DbRow>('SELECT * FROM jury_runs WHERE id = ?', [id])
+    return row ? toJuryRun(row) : undefined
+  }
+
+  getJuryRunByVersion(moduleVersionId: ModuleVersionId): JuryRunRecord | undefined {
+    const row = this.db.get<DbRow>('SELECT * FROM jury_runs WHERE module_version_id = ?', [
+      moduleVersionId,
+    ])
+    return row ? toJuryRun(row) : undefined
+  }
+
+  updateJuryRunStatus(id: string, status: JuryRunRecord['status']): JuryRunRecord {
+    this.db.run('UPDATE jury_runs SET status = ?, completed_at = ? WHERE id = ?', [
+      status,
+      status === 'RUNNING' ? null : nowIso(),
+      id,
+    ])
+    return this.getJuryRun(id)!
+  }
+
+  listJuryRuns(projectId: ProjectId): JuryRunRecord[] {
+    return this.db
+      .all<DbRow>('SELECT * FROM jury_runs WHERE project_id = ? ORDER BY created_at DESC', [
+        projectId,
+      ])
+      .map(toJuryRun)
+  }
+
+  createConsolidation(record: {
+    readonly juryRunId: string
+    readonly moduleVersionId: ModuleVersionId
+    readonly verdict: ConsolidationRecord['verdict']
+    readonly blocking: unknown[]
+    readonly recommendations: unknown[]
+    readonly missingRoles: string[]
+    readonly hash: string
+  }): ConsolidationRecord {
+    const id = createId('con')
+    this.db.run(
+      `INSERT INTO jury_consolidations
+        (id, jury_run_id, module_version_id, verdict, blocking_json, recommendations_json,
+         missing_roles_json, hash, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        record.juryRunId,
+        record.moduleVersionId,
+        record.verdict,
+        JSON.stringify(record.blocking),
+        JSON.stringify(record.recommendations),
+        JSON.stringify(record.missingRoles),
+        record.hash,
+        nowIso(),
+      ],
+    )
+    return this.getConsolidation(id)!
+  }
+
+  getConsolidation(id: string): ConsolidationRecord | undefined {
+    const row = this.db.get<DbRow>('SELECT * FROM jury_consolidations WHERE id = ?', [id])
+    return row ? toConsolidation(row) : undefined
+  }
+
+  getConsolidationByVersion(moduleVersionId: ModuleVersionId): ConsolidationRecord | undefined {
+    const row = this.db.get<DbRow>(
+      'SELECT * FROM jury_consolidations WHERE module_version_id = ?',
+      [moduleVersionId],
+    )
+    return row ? toConsolidation(row) : undefined
+  }
+
+  listConsolidations(projectId: ProjectId): ConsolidationRecord[] {
+    return this.db
+      .all<DbRow>(
+        `SELECT c.* FROM jury_consolidations c
+         JOIN jury_runs j ON j.id = c.jury_run_id
+         WHERE j.project_id = ?
+         ORDER BY c.created_at DESC`,
+        [projectId],
+      )
+      .map(toConsolidation)
+  }
+
+  createApprovedModule(record: {
+    readonly projectId: ProjectId
+    readonly moduleId: ModuleId
+    readonly moduleVersionId: ModuleVersionId
+    readonly commitSha: string
+    readonly artifactHash: string
+    readonly juryRunId: string
+  }): ApprovedModuleRecord {
+    const id = createId('apm')
+    this.db.run(
+      `INSERT INTO approved_modules
+        (id, project_id, module_id, module_version_id, commit_sha, artifact_hash, approved_at, jury_run_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        id,
+        record.projectId,
+        record.moduleId,
+        record.moduleVersionId,
+        record.commitSha,
+        record.artifactHash,
+        nowIso(),
+        record.juryRunId,
+      ],
+    )
+    return this.getApprovedModuleByVersion(record.moduleVersionId)!
+  }
+
+  getApprovedModuleByVersion(moduleVersionId: ModuleVersionId): ApprovedModuleRecord | undefined {
+    const row = this.db.get<DbRow>('SELECT * FROM approved_modules WHERE module_version_id = ?', [
+      moduleVersionId,
+    ])
+    return row ? toApprovedModule(row) : undefined
+  }
+
+  listApprovedModules(projectId: ProjectId): ApprovedModuleRecord[] {
+    return this.db
+      .all<DbRow>('SELECT * FROM approved_modules WHERE project_id = ? ORDER BY approved_at DESC', [
+        projectId,
+      ])
+      .map(toApprovedModule)
   }
 
   createApproval(record: CreateApprovalRecord): Approval {

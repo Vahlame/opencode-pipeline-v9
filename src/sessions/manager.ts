@@ -55,6 +55,50 @@ export class SessionManager {
     return { record, view }
   }
 
+  async createReadOnlySession(input: {
+    readonly projectId: ProjectId
+    readonly agent: Agent
+    readonly directory: string
+    readonly title: string
+    readonly metadata?: Record<string, string | number | boolean | null>
+    readonly model?: ModelReference
+  }): Promise<{ record: SessionRecord; view: SessionView }> {
+    const permissions: OpenCodePermissionRule[] = [
+      { action: 'read', resource: '**', effect: 'allow' },
+      { action: 'read', resource: '**/.env*', effect: 'deny' },
+      { action: 'read', resource: '**/.git/**', effect: 'deny' },
+      { action: 'edit', resource: '*', effect: 'deny' },
+      { action: 'shell', resource: '*', effect: 'deny' },
+      { action: 'external_directory', resource: '*', effect: 'deny' },
+      { action: 'subagent', resource: '*', effect: 'deny' },
+      { action: 'webfetch', resource: '*', effect: 'deny' },
+      { action: 'websearch', resource: '*', effect: 'deny' },
+    ]
+    const view = await this.adapter.createSession({
+      directory: input.directory,
+      agent: input.agent.opencodeAgentId,
+      title: input.title,
+      ...(input.model ? { model: input.model } : {}),
+      permissions,
+      ...(input.metadata ? { metadata: input.metadata } : {}),
+    })
+    const record = this.store.transaction(() => {
+      const created = this.store.createSession({
+        projectId: input.projectId,
+        agentId: input.agent.id,
+        opencodeSessionId: view.id,
+        worktreePath: input.directory,
+        status: 'ACTIVE',
+      })
+      this.emit(input.projectId, 'session.review.created', 'session', created.id, input.agent.id, {
+        opencodeSessionId: view.id,
+        directory: input.directory,
+      })
+      return created
+    })
+    return { record, view }
+  }
+
   async prompt(record: SessionRecord, text: string): Promise<void> {
     if (!record.opencodeSessionId)
       throw new Error(`Session ${record.id} has no OpenCode session id`)

@@ -522,6 +522,7 @@ export class OrchestratorService {
         status: 'IN_REVIEW',
       })
       this.store.setModuleCurrentVersion(module.id, version.id)
+      this.store.updateModuleStatus(module.id, 'IN_REVIEW')
       this.emit(
         module.projectId,
         'module.version.created',

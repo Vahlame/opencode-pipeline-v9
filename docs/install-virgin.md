@@ -77,6 +77,18 @@ npm run test:real
 npm run test:sdk
 ```
 
+## Estado de la prueba
+
+En esta maquina se probo un clon local limpio (sin `.env`, `.runtime` ni
+`node_modules`), se ejecuto `install-virgin.ps1` y despues `npm run check`:
+
+```text
+31 archivos de prueba; 103 pruebas pasan, 2 omitidas
+```
+
+Tambien se corrigio el problema de CRLF que hacia fallar `format:check` en un
+clon nuevo: `.gitattributes` fuerza `eol=lf` y Prettier usa `endOfLine: auto`.
+
 ## Limitaciones de una instalacion virgen
 
 - No se puede validar una maquina virgen desde esta sesion; el script es

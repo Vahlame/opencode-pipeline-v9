@@ -1,4 +1,4 @@
-import { define } from '@opencode/plugin'
+import { Plugin } from '@opencode/plugin'
 import { config as loadDotEnv } from 'dotenv'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -30,7 +30,7 @@ function result(text) {
   return { content: [{ type: 'text', text }] }
 }
 
-export default define({
+export default Plugin.define({
   id: 'orchestrator-tools',
   async setup(context) {
     await context.tool.transform((tools) => {

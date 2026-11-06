@@ -5,6 +5,8 @@ conexion real, persistencia SQLite, autorizacion, scheduler DAG con worktrees,
 jurado independiente, integracion hibrida, feedback global, recuperacion y
 operacion observable.
 
+Instalacion desde un ZIP: sigue `INSTALAR-CON-OPENCODE.md`.
+
 ## Estado actual
 
 - Fase 1: base, adaptador, perfiles y smoke real con OpenCode.

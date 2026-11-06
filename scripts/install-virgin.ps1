@@ -1,6 +1,7 @@
 param(
   [string]$RepoPath = (Get-Location).Path,
-  [switch]$DryRun
+  [switch]$DryRun,
+  [switch]$SkipDoctor
 )
 
 $ErrorActionPreference = 'Stop'
@@ -58,10 +59,23 @@ if ($DryRun) {
   npm install
 }
 
+$doctorFailed = $false
 if (-not $DryRun) {
   npm run db:migrate
+  if ($LASTEXITCODE -ne 0) {
+    throw 'db:migrate fallo. Revisa el error anterior.'
+  }
   npm run build
-  npm run doctor
+  if ($LASTEXITCODE -ne 0) {
+    throw 'build fallo. Revisa el error anterior.'
+  }
+  if (-not $SkipDoctor) {
+    npm run doctor
+    if ($LASTEXITCODE -ne 0) {
+      $doctorFailed = $true
+      Write-Warning 'doctor fallo. Abre OpenCode Desktop V2.2.5+ y ejecuta npm run doctor.'
+    }
+  }
 }
 
 Write-Step 'Siguiente paso'
@@ -80,6 +94,12 @@ Write-Host @'
 
 if ($DryRun) {
   Write-Host 'Dry-run completado; no se modifico nada.' -ForegroundColor Green
+} elseif ($doctorFailed) {
+  Write-Host 'Base instalada, pero doctor quedo pendiente.' -ForegroundColor Yellow
+  Write-Host 'Abre OpenCode Desktop V2.2.5+ y ejecuta: npm run doctor' -ForegroundColor Yellow
+  exit 1
+} elseif ($SkipDoctor) {
+  Write-Host 'Instalacion base completada (doctor omitido).' -ForegroundColor Green
 } else {
   Write-Host 'Instalacion base completada.' -ForegroundColor Green
 }

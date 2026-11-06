@@ -1,0 +1,8 @@
+node_modules
+dist
+coverage
+.tools
+.runtime
+.worktrees
+.opencode
+package-lock.json

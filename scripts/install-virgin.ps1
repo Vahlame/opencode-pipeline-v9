@@ -13,7 +13,7 @@ function Write-Step([string]$Message) {
 Write-Step "OpenCode Multiagent Orchestrator V9 - instalacion"
 Write-Host "Directorio: $RepoPath"
 
-if (-not $IsWindows) {
+if ($env:OS -ne 'Windows_NT') {
   throw 'Este instalador esta pensado para Windows.'
 }
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
@@ -70,4 +70,8 @@ Write-Host @'
 7. No uses el opencode V1 del PATH; usa el V2 de la app.
 '@ -ForegroundColor Green
 
-Write-Host 'Instalacion base completada.' -ForegroundColor Green
+if ($DryRun) {
+  Write-Host 'Dry-run completado; no se modifico nada.' -ForegroundColor Green
+} else {
+  Write-Host 'Instalacion base completada.' -ForegroundColor Green
+}

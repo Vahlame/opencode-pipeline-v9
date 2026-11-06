@@ -32,7 +32,7 @@ describe('shared operational memory', () => {
 
       for (const state of states) {
         expect(state.project.id).toBe(fixture.project.id)
-        expect(state.agents).toHaveLength(12)
+        expect(state.agents).toHaveLength(13)
         expect(state.tasks.some((item) => item.id === task.id)).toBe(true)
         expect(state.modules.some((item) => item.id === module.id)).toBe(true)
         expect(state).not.toHaveProperty('messages')

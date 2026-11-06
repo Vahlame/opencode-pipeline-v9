@@ -13,6 +13,7 @@ import type {
   SqliteStore,
 } from '../persistence/store.js'
 import { sha256 } from '../security/hash.js'
+import { signArtifact } from '../security/signatures.js'
 import { redactText } from '../security/redaction.js'
 import { WorktreeError, matchesAllowedPath } from '../worktrees/manager.js'
 import type { TestCommandResult } from '../worktrees/manager.js'
@@ -47,6 +48,7 @@ export interface IntegrationManagerOptions {
   readonly worktreeRoot: string
   readonly maxAttempts?: number
   readonly resources?: ResourceGovernor
+  readonly signingSecret?: string
 }
 
 export interface IntegrationResult {
@@ -561,6 +563,23 @@ export class IntegrationManager {
         baseCommit,
         manifest: manifest as unknown as Record<string, unknown>,
       })
+      if (this.options.signingSecret) {
+        this.store.createArtifactSignature({
+          projectId: project.id,
+          subjectType: 'INTEGRATION_MANIFEST',
+          subjectId: manifestRecord.id,
+          subjectHash: manifestRecord.hash,
+          signature: signArtifact(
+            {
+              subjectType: 'INTEGRATION_MANIFEST',
+              subjectId: manifestRecord.id,
+              subjectHash: manifestRecord.hash,
+              projectId: project.id,
+            },
+            this.options.signingSecret,
+          ),
+        })
+      }
       for (const conflict of manifestConflicts) {
         this.store.createIntegrationConflict({
           runId: run.id,

@@ -4,10 +4,11 @@
 
 - Base por defecto: `.runtime/orchestrator.db` (ignorada por Git).
 - Migraciones: `migrations/001_initial.sql`, `002_phase3.sql`, `003_phase4.sql`,
-  `004_phase5.sql` y `005_phase6.sql`.
+  `004_phase5.sql`, `005_phase6.sql`, `006_phase7.sql` y
+  `007_provider_usage.sql`.
 - Runner: `src/persistence/database.ts`.
 - Tabla de control: `schema_migrations`.
-- Version actual del esquema: **5**.
+- Version actual del esquema: **7**.
 
 La conexion usa `node:sqlite`, `PRAGMA foreign_keys=ON`, WAL para archivos,
 `busy_timeout=5000` y transacciones `BEGIN IMMEDIATE` para escrituras.
@@ -50,6 +51,8 @@ La conexion usa `node:sqlite`, `PRAGMA foreign_keys=ON`, WAL para archivos,
 | `operations`            | Diario idempotente de operaciones  | PK `id`; unico `(project, kind, idempotency_key)`; lease y resultado            |
 | `recovery_runs`         | Ejecuciones de recuperacion        | PK `id`; FK proyecto; modo, estado, hallazgos y aplicados                       |
 | `recovery_actions`      | Acciones de recuperacion           | PK `id`; FK run; codigo, entidad, estado y detalle                              |
+| `artifact_signatures`   | Firmas HMAC de manifiesto/entrega  | PK `id`; unico `(subject_type, subject_id)`; hash y firma                       |
+| `provider_usage`        | Uso exacto reportado por proveedor | PK `id`; FK proyecto; tokens, coste, request ID y fuente                        |
 
 ## Relaciones principales
 
@@ -83,6 +86,8 @@ projects
   +-- project_resources
   +-- operations
   +-- recovery_runs +-- recovery_actions
+  +-- artifact_signatures
+  +-- provider_usage
 ```
 
 ## Invariantes

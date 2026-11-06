@@ -248,6 +248,80 @@ verificacion: websearch + webfetch del DOI; no se citaron speedups no reproducid
 El agente no invento la fuente, verifico el DOI y separo la evidencia de las
 cifras no reproducidas.
 
+## Extension de endurecimiento operativo
+
+### GUI local
+
+`GET /ui` sirve una Control Room sin framework externo con:
+
+- estado del proyecto y tareas;
+- aprobacion de plan;
+- feedback y dictamenes;
+- integraciones y manifiestos;
+- recuperacion con diagnostico y confirmacion;
+- entrega final con confirmacion humana;
+- recursos, mensajes y outbox.
+
+La GUI usa el mismo API y token humano; no crea una segunda fuente de verdad.
+
+### Herramientas OpenCode
+
+`.opencode/plugins/orchestrator-tools.js` expone al agente:
+
+- `orchestrator_state`;
+- `orchestrator_inbox`;
+- `orchestrator_send`;
+- `orchestrator_delivery`;
+- `orchestrator_math_run`.
+
+Las llamadas usan `ORCH_TOOL_SECRET` y el API local; el agente no recibe el
+token humano. El plugin requiere reiniciar el servidor OpenCode para cargarse.
+
+### Agente UI/UX
+
+Se agrego `disenador` con permisos de lectura, web de referencia y edicion solo
+en `ui/**` y `docs/ui/**`. La skill `ui-ux-review` define el checklist. Una
+revision real detecto y se corrigieron:
+
+- confirmacion contextual antes de aplicar recuperacion;
+- estados de carga/actualizacion y anuncios `aria-live`;
+- labels accesibles y foco visible en controles.
+
+### Ejecucion matematica
+
+`math:run` detecta CPU, memoria e interprete recomendado y ejecuta scripts
+Python o Node dentro del repositorio. Prueba real:
+
+```text
+hardware: AMD Ryzen 7 7840HS, 16 cores, 15.3 GB
+interprete: python 3.14.7
+resultado: PASS en 69 ms
+```
+
+El agente `matematico` puede usar `orchestrator_math_run` a traves del plugin.
+
+### Outbox y uso exacto
+
+- `outbox:dispatch --transport file` entrego **116 eventos** a
+  `.runtime/outbox.ndjson`; la outbox quedo en 0 pendientes.
+- `usage:record` importa uso exacto del proveedor (tokens, coste y request ID).
+  La estimacion local sigue existiendo para cuando el proveedor no entrega datos.
+
+### Firmas
+
+`artifact_signatures` firma manifiestos y entregas con HMAC-SHA256. La entrega
+real se firmo y `delivery:verify` respondio:
+
+```text
+Firma valida: entrega autentica.
+```
+
+### Reconciliacion legacy
+
+`legacy:reconcile --task <id> --decision cancel|requeue --confirm` exige humano,
+confirmacion explicita, auditoria y permite operar sobre proyectos terminales.
+`diagnostics` sigue reportando las tareas legacy sin mutarlas.
+
 ## Manual de uso
 
 ### Instalacion
@@ -349,12 +423,12 @@ npx tsx src/cli.ts maintenance:cleanup --project <project-id> --keep-days 7 --to
 ## Verificacion final
 
 ```text
-npm run check       -> 94 pruebas pasan, 2 omitidas
+npm run check       -> 99 pruebas pasan, 2 omitidas
 npm run build       -> pasa
-npm run db:migrate  -> esquema 5
+npm run db:migrate  -> esquema 7
 npm run test:real   -> 1 prueba real pasa
 npm run test:sdk    -> 1 prueba SDK pasa
-npm run doctor      -> fase 6, OpenCode V2.2.5, 12 perfiles
+npm run doctor      -> fase 6, OpenCode V2.2.5, 13 perfiles
 ```
 
 ## Limitaciones conocidas

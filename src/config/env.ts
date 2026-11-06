@@ -50,6 +50,11 @@ const EnvSchema = z.object({
     z.string().min(1).default('.runtime/orchestrator.db'),
   ),
   ORCH_AUTH_SECRET: z.preprocess(emptyToUndefined, z.string().min(16).optional()),
+  ORCH_TOOL_SECRET: z.preprocess(emptyToUndefined, z.string().min(16).optional()),
+  ORCH_TOOL_API_URL: z.preprocess(
+    emptyToUndefined,
+    z.string().url().default('http://127.0.0.1:4400'),
+  ),
   ORCH_API_HOST: z.preprocess(emptyToUndefined, z.string().min(1).default('127.0.0.1')),
   ORCH_API_PORT: z.coerce.number().int().min(0).max(65_535).default(4400),
   ORCH_MAX_PARALLEL: z.coerce.number().int().min(1).max(16).default(2),

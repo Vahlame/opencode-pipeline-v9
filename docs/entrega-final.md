@@ -6,6 +6,7 @@
 - Hash del manifiesto: 6aa179754e9b6f0cb486ee391dd45bb697a7187d23d7a9ddb3f75df57bc93551
 - Commit integrado: a024fc0732a85a2e3f2ade89717ddf516556a356
 - Feedback: fbr_0524686c7c8e4c008f9007cce1e060fe (PASS)
+- Firma: HMAC-SHA256 94b3809417784758b8de53ed...
 - Creada: 2026-11-06T16:22:31.381Z
 - Entregada: 2026-11-06T16:22:56.676Z
 

@@ -553,6 +553,35 @@ function toRecoveryAction(row: DbRow): RecoveryActionRecord {
   }
 }
 
+function toArtifactSignature(row: DbRow): ArtifactSignatureRecord {
+  return {
+    id: text(row, 'id'),
+    projectId: text(row, 'project_id') as ProjectId,
+    subjectType: text(row, 'subject_type') as ArtifactSignatureRecord['subjectType'],
+    subjectId: text(row, 'subject_id'),
+    subjectHash: text(row, 'subject_hash'),
+    algorithm: text(row, 'algorithm') as ArtifactSignatureRecord['algorithm'],
+    signature: text(row, 'signature'),
+    createdAt: text(row, 'created_at'),
+  }
+}
+
+function toProviderUsage(row: DbRow): ProviderUsageRecord {
+  return {
+    id: text(row, 'id'),
+    projectId: text(row, 'project_id') as ProjectId,
+    provider: text(row, 'provider'),
+    ...(optionalText(row, 'model') ? { model: optionalText(row, 'model') } : {}),
+    ...(optionalText(row, 'request_id') ? { requestId: optionalText(row, 'request_id') } : {}),
+    source: text(row, 'source') as ProviderUsageRecord['source'],
+    inputTokens: integer(row, 'input_tokens'),
+    outputTokens: integer(row, 'output_tokens'),
+    costUsd: Number(row['cost_usd'] ?? 0),
+    ...(optionalText(row, 'raw_json') ? { raw: json(row, 'raw_json') } : {}),
+    createdAt: text(row, 'created_at'),
+  }
+}
+
 function toAuditEntry(row: DbRow): AuditEntry {
   return {
     id: text(row, 'id') as AuditId,
@@ -906,6 +935,31 @@ export interface RecoveryActionRecord {
   readonly entityId?: string
   readonly status: 'REQUIRED' | 'APPLIED' | 'SKIPPED' | 'FAILED'
   readonly detail: Record<string, unknown>
+  readonly createdAt: string
+}
+
+export interface ArtifactSignatureRecord {
+  readonly id: string
+  readonly projectId: ProjectId
+  readonly subjectType: 'INTEGRATION_MANIFEST' | 'FINAL_DELIVERY'
+  readonly subjectId: string
+  readonly subjectHash: string
+  readonly algorithm: 'HMAC-SHA256'
+  readonly signature: string
+  readonly createdAt: string
+}
+
+export interface ProviderUsageRecord {
+  readonly id: string
+  readonly projectId: ProjectId
+  readonly provider: string
+  readonly model?: string
+  readonly requestId?: string
+  readonly source: 'provider' | 'manual' | 'import'
+  readonly inputTokens: number
+  readonly outputTokens: number
+  readonly costUsd: number
+  readonly raw?: Record<string, unknown>
   readonly createdAt: string
 }
 
@@ -2791,6 +2845,125 @@ export class SqliteStore {
     return Number(row?.count ?? 0)
   }
 
+  createArtifactSignature(record: {
+    readonly projectId: ProjectId
+    readonly subjectType: ArtifactSignatureRecord['subjectType']
+    readonly subjectId: string
+    readonly subjectHash: string
+    readonly signature: string
+  }): ArtifactSignatureRecord {
+    const id = createId('sig')
+    this.db.run(
+      `INSERT INTO artifact_signatures
+        (id, project_id, subject_type, subject_id, subject_hash, algorithm, signature, created_at)
+       VALUES (?, ?, ?, ?, ?, 'HMAC-SHA256', ?, ?)
+       ON CONFLICT(subject_type, subject_id) DO UPDATE SET
+         subject_hash = excluded.subject_hash,
+         signature = excluded.signature,
+         created_at = excluded.created_at`,
+      [
+        id,
+        record.projectId,
+        record.subjectType,
+        record.subjectId,
+        record.subjectHash,
+        record.signature,
+        nowIso(),
+      ],
+    )
+    return this.getArtifactSignature(record.subjectType, record.subjectId)!
+  }
+
+  getArtifactSignature(
+    subjectType: ArtifactSignatureRecord['subjectType'],
+    subjectId: string,
+  ): ArtifactSignatureRecord | undefined {
+    const row = this.db.get<DbRow>(
+      'SELECT * FROM artifact_signatures WHERE subject_type = ? AND subject_id = ?',
+      [subjectType, subjectId],
+    )
+    return row ? toArtifactSignature(row) : undefined
+  }
+
+  listArtifactSignatures(projectId: ProjectId): ArtifactSignatureRecord[] {
+    return this.db
+      .all<DbRow>('SELECT * FROM artifact_signatures WHERE project_id = ? ORDER BY created_at', [
+        projectId,
+      ])
+      .map(toArtifactSignature)
+  }
+
+  recordProviderUsage(record: {
+    readonly projectId: ProjectId
+    readonly provider: string
+    readonly model?: string
+    readonly requestId?: string
+    readonly source: ProviderUsageRecord['source']
+    readonly inputTokens: number
+    readonly outputTokens: number
+    readonly costUsd: number
+    readonly raw?: Record<string, unknown>
+  }): ProviderUsageRecord {
+    const id = createId('pus')
+    this.db.run(
+      `INSERT INTO provider_usage
+        (id, project_id, provider, model, request_id, source, input_tokens, output_tokens, cost_usd,
+         raw_json, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       ON CONFLICT(project_id, provider, request_id) DO UPDATE SET
+         input_tokens = excluded.input_tokens,
+         output_tokens = excluded.output_tokens,
+         cost_usd = excluded.cost_usd,
+         raw_json = excluded.raw_json`,
+      [
+        id,
+        record.projectId,
+        record.provider,
+        record.model ?? null,
+        record.requestId ?? null,
+        record.source,
+        record.inputTokens,
+        record.outputTokens,
+        record.costUsd,
+        record.raw ? JSON.stringify(redact(record.raw)) : null,
+        nowIso(),
+      ],
+    )
+    const row = this.db.get<DbRow>(
+      'SELECT * FROM provider_usage WHERE project_id = ? AND provider = ? AND request_id IS ?',
+      [record.projectId, record.provider, record.requestId ?? null],
+    )
+    return toProviderUsage(row!)
+  }
+
+  listProviderUsage(projectId: ProjectId): ProviderUsageRecord[] {
+    return this.db
+      .all<DbRow>('SELECT * FROM provider_usage WHERE project_id = ? ORDER BY created_at DESC', [
+        projectId,
+      ])
+      .map(toProviderUsage)
+  }
+
+  sumProviderUsage(projectId: ProjectId): {
+    inputTokens: number
+    outputTokens: number
+    costUsd: number
+    entries: number
+  } {
+    const row = this.db.get<DbRow>(
+      `SELECT COALESCE(SUM(input_tokens), 0) AS input, COALESCE(SUM(output_tokens), 0) AS output,
+              COALESCE(SUM(cost_usd), 0) AS cost, COUNT(*) AS entries
+       FROM provider_usage WHERE project_id = ?`,
+      [projectId],
+    )
+    return {
+      inputTokens: Number(row?.['input'] ?? 0),
+      outputTokens: Number(row?.['output'] ?? 0),
+      costUsd: Number(row?.['cost'] ?? 0),
+      entries: Number(row?.['entries'] ?? 0),
+    }
+  }
+
   countTable(table: string): number {
     if (!/^[a-z_]+$/.test(table)) throw new Error('Invalid table name')
     const row = this.db.get<{ count: number }>(`SELECT COUNT(*) AS count FROM ${table}`)
@@ -2817,4 +2990,6 @@ export {
   toOperation,
   toRecoveryRun,
   toRecoveryAction,
+  toArtifactSignature,
+  toProviderUsage,
 }

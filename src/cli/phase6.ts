@@ -9,8 +9,11 @@ import { RecoveryManager } from '../recovery/manager.js'
 import { WorktreeMaintenance } from '../recovery/maintenance.js'
 import type { MaintenanceResult } from '../recovery/maintenance.js'
 import { DeliveryService } from '../integration/feedback.js'
+import { detectHardware, runMathScript } from '../math/runner.js'
+import { OutboxDispatcher, FileOutboxHandler, WebhookOutboxHandler } from '../outbox/index.js'
+import { verifyArtifact } from '../security/signatures.js'
 import type { Principal } from '../auth/types.js'
-import type { ProjectId } from '../domain/ids.js'
+import type { ProjectId, TaskId } from '../domain/ids.js'
 import { OrchestratorError } from '../orchestrator/errors.js'
 
 type CliOptions = Record<string, string | boolean | number | undefined>
@@ -108,6 +111,7 @@ export function buildStatusReport(context: AppContext, projectId: ProjectId) {
   const recovery = context.store.listRecoveryRuns(projectId)
   const operations = context.store.listOperations(projectId)
   const resources = context.resources.snapshot(projectId)
+  const exactUsage = context.store.sumProviderUsage(projectId)
   const terminal = ['COMPLETED', 'FAILED', 'CANCELLED'].includes(project.status)
   const failures = [
     ...integrations
@@ -150,6 +154,7 @@ export function buildStatusReport(context: AppContext, projectId: ProjectId) {
     recovery,
     operations,
     resources,
+    exactUsage,
     messages: {
       queued: context.store.listProjectMessages(projectId, 'QUEUED').length,
       outboxPending: context.store.listOutboxForProject(projectId, 'PENDING').length,
@@ -214,6 +219,9 @@ function printStatus(report: StatusReport): void {
     `Recursos: ${report.resources.totalTokens} tokens estimados, ${report.resources.estimatedCostUsd} USD, ${report.resources.elapsedMinutes} min\n`,
   )
   process.stdout.write(
+    `Proveedor exacto: ${report.exactUsage.entries} registros, ${report.exactUsage.inputTokens + report.exactUsage.outputTokens} tokens, ${report.exactUsage.costUsd} USD\n`,
+  )
+  process.stdout.write(
     `Mensajes: ${report.messages.queued} encolados; outbox pendiente=${report.messages.outboxPending}\n`,
   )
   process.stdout.write(
@@ -254,6 +262,7 @@ export function exportDeliveryMarkdown(context: AppContext, deliveryId: string):
   const feedback = context.store.getFeedbackRun(delivery.feedbackId)
   if (!manifest || !feedback)
     throw new OrchestratorError('NOT_FOUND', 'Delivery evidence missing', 404)
+  const signature = context.store.getArtifactSignature('FINAL_DELIVERY', delivery.id)
   const summary = delivery.summary
   const modules = Array.isArray(summary['modules'])
     ? (summary['modules'] as Array<Record<string, unknown>>)
@@ -279,6 +288,7 @@ export function exportDeliveryMarkdown(context: AppContext, deliveryId: string):
     `- Hash del manifiesto: ${manifest.hash}`,
     `- Commit integrado: ${String(manifest.manifest['integrationCommit'] ?? '')}`,
     `- Feedback: ${feedback.id} (${feedback.verdict})`,
+    `- Firma: ${signature ? `${signature.algorithm} ${signature.signature.slice(0, 24)}...` : 'sin firma'}`,
     `- Creada: ${delivery.createdAt}`,
     `- Entregada: ${delivery.deliveredAt ?? 'pendiente'}`,
     '',
@@ -376,7 +386,8 @@ export function registerPhase6Commands(program: Command): void {
           id: projectId,
         })
         const snapshot = context.resources.snapshot(projectId)
-        if (options.json === true) print(snapshot)
+        const exact = context.store.sumProviderUsage(projectId)
+        if (options.json === true) print({ ...snapshot, exact })
         else {
           process.stdout.write(`Proyecto: ${projectId}\n`)
           process.stdout.write(`Inicio: ${snapshot.startedAt}\n`)
@@ -385,7 +396,49 @@ export function registerPhase6Commands(program: Command): void {
             `Tokens estimados: ${snapshot.totalTokens} (in=${snapshot.inputTokens}, out=${snapshot.outputTokens})\n`,
           )
           process.stdout.write(`Coste estimado: ${snapshot.estimatedCostUsd} USD\n`)
+          process.stdout.write(
+            `Proveedor exacto: ${exact.entries} registros, in=${exact.inputTokens}, out=${exact.outputTokens}, coste=${exact.costUsd} USD\n`,
+          )
           process.stdout.write(`Limites superados: ${snapshot.exceeded.join(', ') || 'ninguno'}\n`)
+        }
+      } finally {
+        context.close()
+      }
+    })
+
+  addProject(addToken(program.command('usage:record')))
+    .description('Importa uso exacto de tokens/coste reportado por el proveedor')
+    .option('--provider <name>', 'proveedor')
+    .option('--model <name>', 'modelo')
+    .option('--request <id>', 'request ID del proveedor')
+    .option('--input <n>', 'tokens de entrada')
+    .option('--output <n>', 'tokens de salida')
+    .option('--cost <usd>', 'coste exacto en USD')
+    .option('--source <type>', 'provider | import | manual', 'import')
+    .option('--json', 'salida JSON')
+    .action(async (options: CliOptions) => {
+      const context = createAppContext()
+      try {
+        const projectId = getString(options, 'project') as ProjectId
+        context.authz.require(principal(context, options), 'resource.record', {
+          type: 'project',
+          id: projectId,
+        })
+        const record = context.store.recordProviderUsage({
+          projectId,
+          provider: getString(options, 'provider'),
+          ...(getLocal(options, 'model') ? { model: getLocal(options, 'model')! } : {}),
+          ...(getLocal(options, 'request') ? { requestId: getLocal(options, 'request')! } : {}),
+          source: (getLocal(options, 'source') ?? 'import') as 'provider' | 'manual' | 'import',
+          inputTokens: getNumber(options, 'input', 0),
+          outputTokens: getNumber(options, 'output', 0),
+          costUsd: getNumber(options, 'cost', 0),
+        })
+        if (options.json === true) print(record)
+        else {
+          process.stdout.write(
+            `Uso registrado: ${record.provider} in=${record.inputTokens} out=${record.outputTokens} coste=${record.costUsd} USD\n`,
+          )
         }
       } finally {
         context.close()
@@ -473,6 +526,65 @@ export function registerPhase6Commands(program: Command): void {
       }
     })
 
+  addProject(addToken(program.command('legacy:reconcile')))
+    .description('Reconcilia una tarea legacy con aprobacion humana explicita')
+    .option('--task <id>', 'task ID')
+    .option('--decision <value>', 'cancel | requeue')
+    .option('--confirm', 'confirmar la reconciliacion')
+    .option('--json', 'salida JSON')
+    .action(async (options: CliOptions) => {
+      const context = createAppContext()
+      try {
+        if (options.confirm !== true) {
+          throw new OrchestratorError(
+            'CONFIRM_REQUIRED',
+            'Usa --confirm para aprobar la reconciliacion',
+          )
+        }
+        const task = context.store.getTask(getString(options, 'task') as TaskId)
+        if (!task) throw new OrchestratorError('NOT_FOUND', 'Task not found', 404)
+        context.authz.require(principal(context, options), 'legacy.reconcile', {
+          type: 'project',
+          id: task.projectId,
+        })
+        const decision = getString(options, 'decision')
+        if (decision !== 'cancel' && decision !== 'requeue') {
+          throw new OrchestratorError('BAD_REQUEST', 'decision must be cancel or requeue')
+        }
+        if (decision === 'requeue') {
+          const project = context.store.getProject(task.projectId)
+          if (!project || project.status !== 'RUNNING') {
+            throw new OrchestratorError('CONFLICT', 'requeue requires a RUNNING project')
+          }
+        }
+        const updated = context.store.transaction(() => {
+          if (decision === 'cancel') {
+            const result = context.store.updateTaskState(task.id, 'CANCELLED')
+            const event = context.store.appendEvent({
+              projectId: task.projectId,
+              type: 'legacy.reconciled',
+              aggregateType: 'task',
+              aggregateId: task.id,
+              actorId: principal(context, options).subjectId,
+              payload: { taskId: task.id, decision, previousState: task.state },
+            })
+            context.store.appendOutbox(event.id, 'orchestrator.recovery', {
+              eventId: event.id,
+              type: event.type,
+              aggregateId: event.aggregateId,
+            })
+            return result
+          }
+          const result = context.store.updateTaskState(task.id, 'READY')
+          return result
+        })
+        if (options.json === true) print(updated)
+        else process.stdout.write(`Tarea ${updated.id} reconciliada: ${updated.state}\n`)
+      } finally {
+        context.close()
+      }
+    })
+
   addProject(addToken(program.command('maintenance:cleanup')))
     .description('Planifica o aplica limpieza de worktrees limpios con retencion')
     .option('--apply', 'eliminar worktrees/snapshots limpios')
@@ -513,6 +625,144 @@ export function registerPhase6Commands(program: Command): void {
             }
           }
         }
+      } finally {
+        context.close()
+      }
+    })
+
+  addProject(addToken(program.command('outbox:dispatch')))
+    .description('Entrega eventos pendientes por archivo o webhook')
+    .option('--transport <type>', 'file | webhook', 'file')
+    .option('--target <value>', 'ruta o URL')
+    .option('--limit <n>', 'maximo de eventos', '100')
+    .option('--json', 'salida JSON')
+    .action(async (options: CliOptions) => {
+      const context = createAppContext()
+      try {
+        const projectId = getString(options, 'project') as ProjectId
+        context.authz.require(principal(context, options), 'outbox.dispatch', {
+          type: 'project',
+          id: projectId,
+        })
+        const transport = getLocal(options, 'transport') ?? 'file'
+        const target =
+          getLocal(options, 'target') ??
+          resolve(context.config.projectDir, '.runtime/outbox.ndjson')
+        const handler =
+          transport === 'webhook'
+            ? new WebhookOutboxHandler(target)
+            : transport === 'file'
+              ? new FileOutboxHandler(target)
+              : undefined
+        if (!handler) throw new OrchestratorError('BAD_REQUEST', 'unsupported outbox transport')
+        const dispatcher = new OutboxDispatcher(context.store, handler)
+        const result = await dispatcher.dispatch(getNumber(options, 'limit', 100))
+        if (options.json === true) print(result)
+        else {
+          process.stdout.write(
+            `Outbox: ${result.delivered} entregados, ${result.retried} reintentos, ${result.failed} fallidos\n`,
+          )
+        }
+      } finally {
+        context.close()
+      }
+    })
+
+  addProject(addToken(program.command('math:run')))
+    .description('Ejecuta un script matematico con el interprete mas adecuado al hardware')
+    .option('--script <file>', 'script .py/.mjs/.js')
+    .option('--interpreter <name>', 'auto | python | node', 'auto')
+    .option('--timeout <ms>', 'timeout')
+    .option('--json', 'salida JSON')
+    .action(async (options: CliOptions) => {
+      const context = createAppContext()
+      try {
+        const projectId = getString(options, 'project') as ProjectId
+        context.authz.require(principal(context, options), 'resource.read', {
+          type: 'project',
+          id: projectId,
+        })
+        const result = runMathScript({
+          script: getString(options, 'script'),
+          repositoryRoot: context.config.projectDir,
+          interpreter: (getLocal(options, 'interpreter') ?? 'auto') as 'auto' | 'python' | 'node',
+          ...(options.timeout ? { timeoutMs: getNumber(options, 'timeout', 300_000) } : {}),
+        })
+        if (options.json === true) print(result)
+        else {
+          process.stdout.write(
+            `Math ${result.passed ? 'PASS' : 'FAIL'} · ${result.command} · ${result.durationMs} ms\n`,
+          )
+          process.stdout.write(
+            `Hardware: ${result.hardware.cpuModel} (${result.hardware.cpuCores} cores, ${result.hardware.memoryGb} GB)\n`,
+          )
+          process.stdout.write(result.stdout)
+          if (result.stderr) process.stderr.write(result.stderr)
+        }
+        if (!result.passed) process.exitCode = 1
+      } finally {
+        context.close()
+      }
+    })
+
+  addToken(program.command('math:hardware'))
+    .description('Muestra el hardware detectado y el interprete recomendado')
+    .option('--json', 'salida JSON')
+    .action(async (options: CliOptions) => {
+      const hardware = detectHardware()
+      if (options.json === true) print(hardware)
+      else {
+        process.stdout.write(`Plataforma: ${hardware.platform}/${hardware.arch}\n`)
+        process.stdout.write(`CPU: ${hardware.cpuModel} (${hardware.cpuCores} cores)\n`)
+        process.stdout.write(`Memoria: ${hardware.memoryGb} GB\n`)
+        process.stdout.write(`Interprete recomendado: ${hardware.recommendedInterpreter}\n`)
+      }
+    })
+
+  addToken(program.command('delivery:verify'))
+    .description('Verifica la firma HMAC de una entrega final')
+    .option('--delivery <id>', 'delivery ID')
+    .option('--json', 'salida JSON')
+    .action(async (options: CliOptions) => {
+      const context = createAppContext()
+      try {
+        const delivery = context.store.getFinalDelivery(getString(options, 'delivery'))
+        if (!delivery) throw new OrchestratorError('NOT_FOUND', 'Delivery not found', 404)
+        context.authz.require(principal(context, options), 'delivery.read', {
+          type: 'project',
+          id: delivery.projectId,
+        })
+        const signature = context.store.getArtifactSignature('FINAL_DELIVERY', delivery.id)
+        const feedback = context.store.getFeedbackRun(delivery.feedbackId)
+        const manifest = context.store.getIntegrationManifest(delivery.manifestId)
+        const valid = Boolean(
+          signature &&
+          feedback &&
+          manifest &&
+          context.config.ORCH_AUTH_SECRET &&
+          verifyArtifact(
+            {
+              subjectType: 'FINAL_DELIVERY',
+              subjectId: delivery.id,
+              projectId: delivery.projectId,
+              manifestId: delivery.manifestId,
+              manifestHash: manifest!.hash,
+              feedbackId: feedback!.id,
+              feedbackHash: feedback!.hash,
+            },
+            signature.signature,
+            context.config.ORCH_AUTH_SECRET,
+          ),
+        )
+        if (options.json === true) print({ valid, signature })
+        else {
+          process.stdout.write(
+            valid
+              ? 'Firma valida: entrega autentica.\n'
+              : 'Firma invalida o ausente; no confies en el artefacto.\n',
+          )
+        }
+        if (!valid) process.exitCode = 1
       } finally {
         context.close()
       }

@@ -86,6 +86,9 @@ export type Action =
   | 'maintenance.cleanup'
   | 'maintenance.read'
   | 'resource.read'
+  | 'outbox.dispatch'
+  | 'legacy.reconcile'
+  | 'resource.record'
 
 export type ResourceType =
   | 'project'
@@ -180,6 +183,7 @@ const COORDINATOR_ACTIONS = new Set<Action>([
   'session.interrupt',
   'jury.run',
   'recovery.run',
+  'outbox.dispatch',
   'temporary_permission.grant',
 ])
 
@@ -203,6 +207,9 @@ const HUMAN_ACTIONS = new Set<Action>([
   'delivery.finalize',
   'recovery.run',
   'maintenance.cleanup',
+  'outbox.dispatch',
+  'legacy.reconcile',
+  'resource.record',
   'temporary_permission.grant',
 ])
 
@@ -295,6 +302,9 @@ export class AuthorizationService {
       projectState &&
       !READ_ACTIONS.has(action) &&
       action !== 'maintenance.cleanup' &&
+      action !== 'outbox.dispatch' &&
+      action !== 'legacy.reconcile' &&
+      action !== 'resource.record' &&
       ['COMPLETED', 'FAILED', 'CANCELLED'].includes(projectState.status)
     ) {
       return this.record(

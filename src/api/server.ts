@@ -7,6 +7,10 @@ import { AuthorizationError } from '../auth/authorization.js'
 import { OrchestratorError } from '../orchestrator/errors.js'
 import type { MessageId, PlanId, ProjectId } from '../domain/ids.js'
 import { DeliveryService } from '../integration/feedback.js'
+import { RecoveryManager } from '../recovery/manager.js'
+import { WorktreeManager } from '../worktrees/manager.js'
+import { renderUi } from './ui.js'
+import { runMathScript } from '../math/runner.js'
 import type { AppContext } from '../app/context.js'
 
 export interface ApiServerOptions {
@@ -101,6 +105,92 @@ export async function startApiServer(
         })
         return
       }
+      if (request.method === 'GET' && (path === '/ui' || path === '/ui/')) {
+        const html = renderUi()
+        response.statusCode = 200
+        response.setHeader('content-type', 'text/html; charset=utf-8')
+        response.setHeader('cache-control', 'no-store')
+        response.end(html)
+        return
+      }
+      if (path.startsWith('/api/tools/')) {
+        const secret = context.config.ORCH_TOOL_SECRET
+        if (!secret || request.headers['x-orch-tool-secret'] !== secret) {
+          sendError(response, 401, 'UNAUTHORIZED', 'Tool secret required')
+          return
+        }
+        const toolProjectId = (url.searchParams.get('projectId') ?? undefined) as
+          ProjectId | undefined
+        if (request.method === 'POST' && path === '/api/tools/state') {
+          const body = await readJson(request)
+          const id = (String(body.projectId ?? toolProjectId ?? '') || undefined) as
+            ProjectId | undefined
+          if (!id) throw new Error('projectId is required')
+          sendJson(
+            response,
+            200,
+            context.service.getState({ subjectId: 'tool', kind: 'HUMAN', role: 'HUMAN' }, id),
+          )
+          return
+        }
+        if (request.method === 'POST' && path === '/api/tools/inbox') {
+          const body = await readJson(request)
+          const agent = context.store.getAgent(requireString(body, 'agentId') as never)
+          if (!agent) throw new Error('agent not found')
+          sendJson(response, 200, context.store.listMessages(agent.projectId, agent.id))
+          return
+        }
+        if (request.method === 'POST' && path === '/api/tools/send') {
+          const body = await readJson(request)
+          const from = context.store.getAgent(requireString(body, 'fromAgentId') as never)
+          const to = context.store.getAgent(requireString(body, 'toAgentId') as never)
+          if (!from || !to) throw new Error('agent not found')
+          const result = context.service.sendMessage(
+            {
+              subjectId: from.id,
+              kind: 'AGENT',
+              role: from.role,
+              projectId: from.projectId,
+              agentId: from.id,
+            },
+            {
+              projectId: from.projectId,
+              toAgentId: to.id,
+              correlationId: String(body.correlationId ?? 'tool'),
+              kind: String(body.kind ?? 'INFO') as never,
+              priority: typeof body.priority === 'number' ? body.priority : undefined,
+              payload:
+                body.payload && typeof body.payload === 'object' && !Array.isArray(body.payload)
+                  ? (body.payload as Record<string, unknown>)
+                  : {},
+              idempotencyKey: requireString(body, 'idempotencyKey'),
+            },
+          )
+          sendJson(response, 200, result)
+          return
+        }
+        if (request.method === 'POST' && path === '/api/tools/delivery') {
+          const body = await readJson(request)
+          const id = (String(body.projectId ?? toolProjectId ?? '') || undefined) as
+            ProjectId | undefined
+          if (!id) throw new Error('projectId is required')
+          sendJson(response, 200, context.store.listFinalDeliveries(id)[0] ?? null)
+          return
+        }
+        if (request.method === 'POST' && path === '/api/tools/math/run') {
+          const body = await readJson(request)
+          const result = runMathScript({
+            script: requireString(body, 'script'),
+            repositoryRoot: context.config.projectDir,
+            interpreter: String(body.interpreter ?? 'auto') as 'auto' | 'python' | 'node',
+            ...(typeof body.timeoutMs === 'number' ? { timeoutMs: body.timeoutMs } : {}),
+          })
+          sendJson(response, 200, result)
+          return
+        }
+        sendError(response, 404, 'NOT_FOUND', 'Tool route not found')
+        return
+      }
 
       const token = bearerToken(request)
       if (!token) {
@@ -121,6 +211,11 @@ export async function startApiServer(
 
       if (method === 'GET' && path === '/api/state') {
         sendJson(response, 200, context.service.getState(principal, requireProject(projectId)))
+        return
+      }
+      if (method === 'GET' && path === '/api/plans') {
+        const id = requireProject(projectId)
+        sendJson(response, 200, context.service.listPlans(principal, id))
         return
       }
       if (method === 'GET' && path === '/api/agents') {
@@ -218,6 +313,38 @@ export async function startApiServer(
         const id = requireProject(projectId)
         context.authz.require(principal, 'delivery.read', { type: 'project', id })
         sendJson(response, 200, context.store.listFinalDeliveries(id))
+        return
+      }
+      if (method === 'GET' && path === '/api/recovery/history') {
+        const id = requireProject(projectId)
+        context.authz.require(principal, 'recovery.read', { type: 'project', id })
+        sendJson(
+          response,
+          200,
+          context.store.listRecoveryRuns(id).map((run) => ({
+            ...run,
+            actions: context.store.listRecoveryActions(run.id),
+          })),
+        )
+        return
+      }
+      if (method === 'POST' && path === '/api/recovery/run') {
+        const id = requireProject(projectId)
+        const body = await readJson(request)
+        const manager = new RecoveryManager(
+          context.store,
+          context.authz,
+          new WorktreeManager(context.config.projectDir, context.config.worktreeRoot),
+          {
+            staleMinutes: context.config.ORCH_RECOVERY_STALE_MINUTES,
+            taskMaxAttempts: context.config.ORCH_TASK_MAX_ATTEMPTS,
+            leaseSeconds: context.config.ORCH_LEASE_SECONDS,
+            operationLeaseSeconds: context.config.ORCH_OPERATION_LEASE_SECONDS,
+          },
+          undefined,
+          context.resources,
+        )
+        sendJson(response, 200, await manager.run(principal, id, { apply: body.apply === true }))
         return
       }
       if (method === 'GET' && path === '/api/audit') {

@@ -11,6 +11,7 @@ const expectedAgents = [
   'backend',
   'database',
   'matematico',
+  'disenador',
   'testing',
   'debugger',
   'architecture',
@@ -65,6 +66,7 @@ describe('V2 agent profiles', () => {
       'review-protocol',
       'security-boundaries',
       'math-research',
+      'ui-ux-review',
     ]) {
       expect(existsSync(join(root, '.opencode', 'skills', skill, 'SKILL.md'))).toBe(true)
     }

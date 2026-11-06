@@ -4,3 +4,4 @@ export {
   type OutboxHandler,
   type OutboxItem,
 } from './dispatcher.js'
+export { FileOutboxHandler, WebhookOutboxHandler } from './transports.js'

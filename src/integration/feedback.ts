@@ -13,6 +13,7 @@ import type {
 } from '../persistence/store.js'
 import type { SessionManager } from '../sessions/manager.js'
 import { sha256 } from '../security/hash.js'
+import { signArtifact } from '../security/signatures.js'
 import { redactText } from '../security/redaction.js'
 import type { WorktreeManager } from '../worktrees/manager.js'
 import { ConflictError, NotFoundError } from '../orchestrator/errors.js'
@@ -200,6 +201,7 @@ export class FeedbackService {
     private readonly authz: AuthorizationService,
     private readonly worktrees: WorktreeManager,
     private readonly executor: FeedbackExecutor,
+    private readonly signingSecret?: string,
   ) {}
 
   async run(principal: Principal, manifestId: string): Promise<FeedbackResult> {
@@ -620,6 +622,29 @@ export class FeedbackService {
       feedbackId: feedback.id,
       summary,
     })
+    if (this.signingSecret) {
+      this.store.createArtifactSignature({
+        projectId: input.project.id,
+        subjectType: 'FINAL_DELIVERY',
+        subjectId: delivery.id,
+        subjectHash: sha256({
+          manifestHash: input.manifestRecord.hash,
+          feedbackHash: feedback.hash,
+        }),
+        signature: signArtifact(
+          {
+            subjectType: 'FINAL_DELIVERY',
+            subjectId: delivery.id,
+            projectId: input.project.id,
+            manifestId: input.manifestRecord.id,
+            manifestHash: input.manifestRecord.hash,
+            feedbackId: feedback.id,
+            feedbackHash: feedback.hash,
+          },
+          this.signingSecret,
+        ),
+      })
+    }
     const parent = this.store.getAgentByOpenCodeId(input.project.id, 'padre')
     this.emit(input.project.id, 'delivery.ready', 'final_delivery', delivery.id, 'feedback', {
       deliveryId: delivery.id,

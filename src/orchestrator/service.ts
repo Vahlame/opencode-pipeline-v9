@@ -133,6 +133,7 @@ const BOOTSTRAP_AGENTS: ReadonlyArray<{
   { opencodeAgentId: 'backend', role: 'SPECIALIST', name: 'Especialista Backend' },
   { opencodeAgentId: 'database', role: 'SPECIALIST', name: 'Especialista Database' },
   { opencodeAgentId: 'matematico', role: 'SPECIALIST', name: 'Especialista Matematico' },
+  { opencodeAgentId: 'disenador', role: 'SPECIALIST', name: 'Disenador UI/UX' },
   { opencodeAgentId: 'testing', role: 'JUDGE_TESTS', name: 'Juez de Pruebas' },
   { opencodeAgentId: 'debugger', role: 'JUDGE_DEBUG', name: 'Juez de Depuración' },
   { opencodeAgentId: 'architecture', role: 'JUDGE_ARCHITECTURE', name: 'Juez de Arquitectura' },
@@ -218,9 +219,11 @@ export class OrchestratorService {
           capabilities:
             definition.opencodeAgentId === 'matematico'
               ? ['read', 'edit:own-module', 'web-research', 'math-modeling']
-              : definition.role === 'SPECIALIST'
-                ? ['edit:own-module', 'read']
-                : ['read'],
+              : definition.opencodeAgentId === 'disenador'
+                ? ['read', 'edit:own-module', 'web-research', 'ui-ux-review']
+                : definition.role === 'SPECIALIST'
+                  ? ['edit:own-module', 'read']
+                  : ['read'],
         })
         this.emit(projectId, 'agent.registered', 'agent', agent.id, principal.subjectId, {
           role: agent.role,

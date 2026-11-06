@@ -84,6 +84,9 @@ function integrationManager(
       worktreeRoot: context.config.worktreeRoot,
       maxAttempts: context.config.ORCH_MAX_INTEGRATION_ATTEMPTS,
       resources: context.resources,
+      ...(context.config.ORCH_AUTH_SECRET
+        ? { signingSecret: context.config.ORCH_AUTH_SECRET }
+        : {}),
     },
     adapterAuthor,
   )
@@ -192,7 +195,13 @@ export function registerPhase5Commands(program: Command): void {
         )
         const sessions = new SessionManager(context.store, adapter, context.resources)
         const executor = new OpenCodeFeedbackExecutor(context.store, sessions, context.config)
-        const service = new FeedbackService(context.store, context.authz, worktrees, executor)
+        const service = new FeedbackService(
+          context.store,
+          context.authz,
+          worktrees,
+          executor,
+          context.config.ORCH_AUTH_SECRET,
+        )
         const result = await service.run(principal(context, options), manifestId)
         print(result)
       } finally {

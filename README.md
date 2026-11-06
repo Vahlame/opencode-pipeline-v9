@@ -182,6 +182,11 @@ La seccion **Agentes** muestra todas las sesiones del pipeline (especialistas,
 jurados, feedback y coordinacion). Al elegir una, ves su conversacion completa,
 sus tokens y su tarea; para responder, abre esa sesion en OpenCode Desktop.
 
+El **Chat con el Padre** es el canal humano. El Padre no decide por ti: te
+cuenta lo que necesitan los agentes y te pide decisiones de diseno, alcance o
+criterios. Los agentes estan instruidos para escalar esas dudas al Padre en vez
+de inventar una respuesta.
+
 El plugin `.opencode/plugins/orchestrator-tools.js` expone al agente estado,
 inbox, envio de mensajes, entrega y `orchestrator_math_run`. Requiere
 `ORCH_TOOL_SECRET` y reiniciar OpenCode. Es un plugin local del proyecto: puede

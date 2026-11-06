@@ -132,6 +132,10 @@ La seccion **Agentes** lista todas las sesiones (especialistas, jurados, feedbac
 y muestra la conversacion completa de cada una. Para responder, abre esa sesion
 en OpenCode Desktop.
 
+El **Chat con el Padre** es el canal humano: el Padre resume lo que necesitan los
+agentes y te pide decisiones de diseno o alcance. No decide por ti. Los agentes
+estan instruidos para escalar esas dudas al Padre.
+
 El token manual solo se necesita para CLI o automatizacion:
 
 ```powershell

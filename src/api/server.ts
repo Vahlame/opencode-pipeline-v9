@@ -15,7 +15,9 @@ import { TaskExecutor } from '../orchestrator/task-executor.js'
 import { Scheduler } from '../orchestrator/scheduler.js'
 import { renderUi } from './ui.js'
 import { runMathScript } from '../math/runner.js'
+import { parseModelRef } from '../config/env.js'
 import type { AppContext } from '../app/context.js'
+import type { SessionRecord } from '../persistence/store.js'
 
 export interface ApiServerOptions {
   readonly host?: string
@@ -98,6 +100,78 @@ function stringList(body: Record<string, unknown>, key: string): string[] {
       .filter(Boolean)
   }
   return []
+}
+
+async function ensureChatSession(
+  context: AppContext,
+  adapter: Awaited<ReturnType<typeof createOpenCodeAdapter>>,
+  projectId: ProjectId,
+): Promise<SessionRecord> {
+  const project = context.store.getProject(projectId)
+  if (!project) throw new OrchestratorError('NOT_FOUND', 'Project not found', 404)
+  const parent = context.store
+    .listAgents(projectId)
+    .find((agent) => agent.opencodeAgentId === 'padre')
+  if (!parent) throw new OrchestratorError('NOT_FOUND', 'Parent agent not found', 404)
+
+  const existing = context.store
+    .listSessions(projectId)
+    .find((session) => session.purpose === 'human-chat' && session.opencodeSessionId)
+  if (existing?.opencodeSessionId) {
+    const view = await adapter.getSession(existing.opencodeSessionId)
+    if (view && view.outcome !== 'failed' && view.outcome !== 'interrupted') return existing
+  }
+
+  const model = parseModelRef(context.config.ORCH_AGENT_MODEL ?? context.config.OPENCODE_MODEL)
+  const sessions = new SessionManager(context.store, adapter, context.resources)
+  const created = await sessions.createReadOnlySession({
+    projectId,
+    agent: parent,
+    directory: context.config.projectDir,
+    title: `Chat humano - ${project.name}`,
+    purpose: 'human-chat',
+    ...(model ? { model } : {}),
+    metadata: { kind: 'human-chat', parentAgentId: parent.id },
+  })
+  return created.record
+}
+
+function chatDigest(context: AppContext, projectId: ProjectId, parentId: string): string {
+  const project = context.store.getProject(projectId)
+  if (!project) throw new OrchestratorError('NOT_FOUND', 'Project not found', 404)
+  const tasks = context.store.listTasks(projectId)
+  const agents = context.store.listAgents(projectId)
+  const messages = context.store.listMessages(projectId, parentId as never, 12)
+  const events = context.store.listEvents(projectId, 8)
+  const plan = context.store.listPlans(projectId)[0]
+  const delivery = context.store.listFinalDeliveries(projectId)[0]
+  const taskLines = tasks.length
+    ? tasks
+        .map(
+          (task) =>
+            `${task.title} [${task.state}]${task.ownerAgentId ? ` owner=${task.ownerAgentId}` : ''}`,
+        )
+        .join('; ')
+    : 'ninguna'
+  const messageLines = messages.length
+    ? messages
+        .map(
+          (message) =>
+            `${message.kind} de ${message.fromAgentId}: ${JSON.stringify(message.payload).slice(0, 500)}`,
+        )
+        .join(' | ')
+    : 'ninguno'
+  return [
+    'Contexto del orquestador (solo lectura):',
+    `Proyecto: ${project.name} (${project.id}), estado ${project.status}.`,
+    `Padre agentId: ${parentId}.`,
+    `Agentes registrados: ${agents.length}.`,
+    `Plan: ${plan ? `${plan.title} [${plan.status}] hash=${plan.hash}` : 'sin plan'}.`,
+    `Entrega final: ${delivery ? `${delivery.id} [${delivery.status}] feedback=${delivery.feedbackId}` : 'sin entrega'}.`,
+    `Tareas: ${taskLines}.`,
+    `Mensajes pendientes para el Padre: ${messageLines}.`,
+    `Ultimos eventos: ${events.map((event) => `${event.type} (${event.aggregateId})`).join(', ') || 'ninguno'}.`,
+  ].join('\n')
 }
 
 /**
@@ -460,23 +534,26 @@ export async function startApiServer(
       if (method === 'GET' && path === '/api/sessions') {
         const id = requireProject(projectId)
         context.authz.require(principal, 'state.read', { type: 'project', id })
-        const sessions = context.store.listSessions(id).map((session) => {
-          const agent = context.store.getAgent(session.agentId)
-          const task = session.taskId ? context.store.getTask(session.taskId) : undefined
-          return {
-            ...session,
-            agent: agent
-              ? {
-                  id: agent.id,
-                  name: agent.name,
-                  role: agent.role,
-                  opencodeAgentId: agent.opencodeAgentId,
-                }
-              : null,
-            task: task ? { id: task.id, title: task.title, state: task.state } : null,
-            usage: context.store.usageForSession(session.id),
-          }
-        })
+        const sessions = context.store
+          .listSessions(id)
+          .filter((session) => session.purpose !== 'human-chat')
+          .map((session) => {
+            const agent = context.store.getAgent(session.agentId)
+            const task = session.taskId ? context.store.getTask(session.taskId) : undefined
+            return {
+              ...session,
+              agent: agent
+                ? {
+                    id: agent.id,
+                    name: agent.name,
+                    role: agent.role,
+                    opencodeAgentId: agent.opencodeAgentId,
+                  }
+                : null,
+              task: task ? { id: task.id, title: task.title, state: task.state } : null,
+              usage: context.store.usageForSession(session.id),
+            }
+          })
         sessions.sort((left, right) => Date.parse(right.createdAt) - Date.parse(left.createdAt))
         sendJson(response, 200, sessions)
         return
@@ -497,6 +574,59 @@ export async function startApiServer(
         try {
           const messages = await adapter.getTranscript(session.opencodeSessionId)
           sendJson(response, 200, { messages })
+        } finally {
+          await adapter.close()
+        }
+        return
+      }
+      if (method === 'GET' && path === '/api/chat') {
+        const id = requireProject(projectId)
+        context.authz.require(principal, 'state.read', { type: 'project', id })
+        const adapter = await createOpenCodeAdapter(context.config)
+        try {
+          const record = await ensureChatSession(context, adapter, id)
+          const messages = record.opencodeSessionId
+            ? await adapter.getTranscript(record.opencodeSessionId)
+            : []
+          sendJson(response, 200, { sessionId: record.id, messages })
+        } finally {
+          await adapter.close()
+        }
+        return
+      }
+      if (method === 'POST' && path === '/api/chat') {
+        const id = requireProject(projectId)
+        context.authz.require(principal, 'state.read', { type: 'project', id })
+        const body = await readJson(request)
+        const text = requireString(body, 'text')
+        const adapter = await createOpenCodeAdapter(context.config)
+        try {
+          const record = await ensureChatSession(context, adapter, id)
+          const parent = context.store
+            .listAgents(id)
+            .find((agent) => agent.opencodeAgentId === 'padre')
+          if (!parent) throw new OrchestratorError('NOT_FOUND', 'Parent agent not found', 404)
+          const sessions = new SessionManager(context.store, adapter, context.resources)
+          await sessions.prompt(
+            record,
+            [
+              'Eres el Padre del sistema y hablas directamente con el humano.',
+              'Tu trabajo es traducir lo que necesitan los agentes, explicar el estado y pedir decisiones.',
+              'No tomes decisiones de diseno, alcance, interfaz, experiencia, arquitectura o criterios de aceptacion por tu cuenta.',
+              'Si un agente te pide una decision o hay una duda que afecte al usuario, traslada la pregunta al humano con opciones concretas.',
+              'No inventes aprobaciones ni cambies estados. No edites archivos ni ejecutes shell.',
+              'No uses la herramienta question ni formularios interactivos: haz tus preguntas directamente en el texto de la respuesta, porque el humano te responde por este chat.',
+              'No uses herramientas ni Code Mode en este chat. El contexto ya viene resumido en este mensaje; responde directamente con texto.',
+              'Responde en espanol claro y breve. Si falta contexto, pide lo que necesitas.',
+              '',
+              chatDigest(context, id, parent.id),
+              '',
+              'Mensaje del humano:',
+              text,
+            ].join('\n'),
+          )
+          const messages = await sessions.wait(record, context.config.ORCH_SESSION_TIMEOUT_MS)
+          sendJson(response, 200, { sessionId: record.id, messages })
         } finally {
           await adapter.close()
         }

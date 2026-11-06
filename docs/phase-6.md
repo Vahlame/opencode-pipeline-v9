@@ -258,6 +258,7 @@ cifras no reproducidas.
 - creacion y seleccion de proyectos;
 - creacion de plan y tareas;
 - lista de agentes con su conversacion y consumo;
+- chat persistente con el Padre para decisiones humanas;
 - aprobacion de plan;
 - inicio, pausa y ejecucion del scheduler;
 - feedback y dictamenes;

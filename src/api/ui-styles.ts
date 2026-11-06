@@ -447,6 +447,9 @@ export const uiStyles = `
       .command-bar .controls { width: 100%; }
     }
     .agent-reply-note { margin-top:14px; padding:10px 12px; border-radius:10px; background: rgba(109,168,255,.06); border:1px solid rgba(109,168,255,.18); color: var(--muted); font-size:11px; line-height:1.5; }
+    .chat-compose { display:flex; gap:8px; align-items:flex-end; margin-top:12px; }
+    .chat-compose textarea { flex:1; min-height:48px; }
+    .chat-compose .btn { flex:none; }
     .agent-chat { display:grid; gap:10px; margin-top:16px; max-height:520px; overflow:auto; padding-right:4px; }
     .chat-msg { border:1px solid var(--line-soft); border-radius:12px; padding:11px 13px; max-width:94%; background: rgba(255,255,255,.025); }
     .chat-msg.user { margin-left:auto; border-color: rgba(244,184,96,.3); background: rgba(244,184,96,.075); }

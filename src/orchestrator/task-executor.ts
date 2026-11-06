@@ -58,7 +58,10 @@ export class TaskExecutor {
       }, this.config.ORCH_HEARTBEAT_SECONDS * 1000)
       timer.unref?.()
 
-      await this.sessions.prompt(session.record, this.contractPrompt(task, contract, worktree.path))
+      await this.sessions.prompt(
+        session.record,
+        this.contractPrompt(task, contract, worktree.path, agent),
+      )
       await this.sessions.wait(session.record, this.config.ORCH_SESSION_TIMEOUT_MS)
 
       this.worktrees.validateChangedPaths(worktree.path, contract.allowedPaths)
@@ -209,10 +212,14 @@ export class TaskExecutor {
     task: TaskClaim['task'],
     contract: Contract,
     worktreePath: string,
+    agent: Agent,
   ): string {
     const tasks = this.store.listTasks(task.projectId)
     const modules = this.store.listModules(task.projectId)
     const dependencies = this.store.listDependenciesForProject(task.projectId)
+    const parent = this.store
+      .listAgents(task.projectId)
+      .find((candidate) => candidate.role === 'PARENT')
     const sharedState = {
       projectId: task.projectId,
       planId: task.planId,
@@ -261,6 +268,8 @@ export class TaskExecutor {
       '- Usa las herramientas de escritura/edición para crear el código y los tests.',
       '- Los tests serán ejecutados por el orquestador después de tu respuesta.',
       '- No inventes commits; el orquestador crea el commit y la versión inmutable.',
+      '- Si aparece una duda de diseño, alcance, UX, arquitectura o criterio de aceptación que no esté resuelta en el contrato, NO decidas por tu cuenta.',
+      `- Para consultar al humano, usa la herramienta orchestrator_send con fromAgentId=${agent.id}, toAgentId=${parent?.id ?? 'parent'}, kind="QUERY" y un idempotencyKey único. Explica la duda y ofrece opciones concretas.`,
       '- Cuando termines, responde con un resumen breve y hechos verificables.',
     ].join('\n')
   }

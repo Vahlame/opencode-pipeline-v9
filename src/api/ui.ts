@@ -127,6 +127,28 @@ export function renderUi(): string {
           </div>
           <div class="section-tag"><button class="btn ghost small" type="button" onclick="loadAgents()">Actualizar</button></div>
         </div>
+        <div class="grid" style="margin-bottom:16px">
+          <div class="card span-8">
+            <div class="eyebrow">Canal humano</div>
+            <h3>Habla con el Padre</h3>
+            <div class="muted" style="margin-top:5px">El Padre no decide por ti: te cuenta lo que necesitan los agentes y te pide decisiones de diseno, alcance o criterios.</div>
+            <div id="parent-chat" class="agent-chat" style="max-height:360px">
+              <div class="empty"><strong>Sin conversacion todavia</strong>Escribe abajo para abrir el canal con el Padre.</div>
+            </div>
+            <div class="chat-compose">
+              <textarea id="chat-input" rows="2" placeholder="Escribe una duda, decision o instruccion para el Padre" aria-label="Mensaje para el Padre"></textarea>
+              <button class="btn" type="button" id="chat-send" onclick="sendChat()">Enviar</button>
+            </div>
+            <div class="hint" id="chat-status">El Padre responde con el estado real del proyecto y las preguntas pendientes.</div>
+          </div>
+          <div class="card span-4 blue">
+            <div class="eyebrow">Contexto</div>
+            <h3>Lo que ve el Padre</h3>
+            <div class="list" id="chat-context">
+              <div class="empty">Carga un proyecto para ver el contexto.</div>
+            </div>
+          </div>
+        </div>
         <div class="grid">
           <div class="card span-4">
             <div class="eyebrow">Sesiones registradas</div>
@@ -411,7 +433,7 @@ export function renderUi(): string {
       sessionStorage.setItem('orch-project', state.projectId);
       $('load-state').textContent = 'Cargando...';
       try {
-        const [stateData, plans, feedback, deliveries, integrations, recovery, usage, sessions] = await Promise.all([
+        const [stateData, plans, feedback, deliveries, integrations, recovery, usage, sessions, chat] = await Promise.all([
           api('/api/state?projectId=' + encodeURIComponent(state.projectId)),
           api('/api/plans?projectId=' + encodeURIComponent(state.projectId)),
           api('/api/feedback?projectId=' + encodeURIComponent(state.projectId)),
@@ -420,10 +442,13 @@ export function renderUi(): string {
           api('/api/recovery/history?projectId=' + encodeURIComponent(state.projectId)),
           api('/api/usage?projectId=' + encodeURIComponent(state.projectId)),
           api('/api/sessions?projectId=' + encodeURIComponent(state.projectId)),
+          api('/api/chat?projectId=' + encodeURIComponent(state.projectId)),
         ]);
-        state.data = { stateData, plans, feedback, deliveries, integrations, recovery, usage, sessions };
+        state.data = { stateData, plans, feedback, deliveries, integrations, recovery, usage, sessions, chat };
         render();
         renderAgents(sessions);
+        renderParentChat(chat.messages || []);
+        renderChatContext(state.data);
         $('load-state').textContent = 'Actualizado ' + new Date().toLocaleTimeString();
         toast('Estado actualizado');
       } catch (error) { $('load-state').textContent = 'Error de carga'; toast(error.message, true); }
@@ -529,6 +554,69 @@ export function renderUi(): string {
       if (role === 'COORDINATOR') return 'role-coordinator';
       if (role === 'PARENT') return 'role-parent';
       return '';
+    }
+    function renderParentChat(messages) {
+      const container = $('parent-chat');
+      const visible = (messages || []).filter((message) => message.role === 'user' || message.role === 'assistant');
+      if (!visible.length) {
+        container.innerHTML = '<div class="empty"><strong>Sin conversacion todavia</strong>Escribe abajo para abrir el canal con el Padre.</div>';
+        return;
+      }
+      container.innerHTML = visible.slice(-40).map((message) => {
+        const role = message.role === 'user' ? 'user' : 'assistant';
+        const who = message.role === 'user' ? 'Tu' : 'Padre';
+        return '<div class="chat-msg ' + role + '"><div class="role">' + who + '</div><p>' + esc(message.text || '(sin texto)') + '</p></div>';
+      }).join('');
+      container.scrollTop = container.scrollHeight;
+    }
+    function renderChatContext(data) {
+      const p = data.stateData.project;
+      const tasks = data.stateData.tasks || [];
+      const ready = tasks.filter((task) => task.state === 'READY').length;
+      const blocked = tasks.filter((task) => ['BLOCKED','FAILED','PAUSED'].includes(task.state)).length;
+      const agents = data.stateData.agents || [];
+      const pending = data.stateData.messages ? data.stateData.messages.queued : 0;
+      const rows = [
+        ['Estado', p.status],
+        ['Tareas', tasks.length + ' (' + ready + ' listas)'],
+        ['Agentes', String(agents.length)],
+        ['Bloqueos', String(blocked)],
+        ['Mensajes en cola', String(pending)],
+      ];
+      $('chat-context').innerHTML = rows.map(([label, value]) =>
+        '<div class="row"><div><strong>' + esc(label) + '</strong><small>' + esc(value) + '</small></div></div>'
+      ).join('');
+    }
+    async function loadChat() {
+      if (!state.projectId) return;
+      try {
+        const chat = await api('/api/chat?projectId=' + encodeURIComponent(state.projectId));
+        renderParentChat(chat.messages || []);
+      } catch (error) { $('chat-status').textContent = 'No se pudo cargar el chat: ' + error.message; }
+    }
+    async function sendChat() {
+      const input = $('chat-input');
+      const text = input.value.trim();
+      if (!state.projectId) return toast('Selecciona un proyecto primero', true);
+      if (!text) return toast('Escribe un mensaje para el Padre', true);
+      input.value = '';
+      const button = $('chat-send');
+      button.disabled = true;
+      $('chat-status').textContent = 'El Padre esta leyendo el estado y pensando...';
+      try {
+        const chat = await api('/api/chat?projectId=' + encodeURIComponent(state.projectId), {
+          method: 'POST',
+          body: JSON.stringify({ text }),
+        });
+        renderParentChat(chat.messages || []);
+        $('chat-status').textContent = 'Respuesta recibida ' + new Date().toLocaleTimeString();
+        await load();
+      } catch (error) {
+        $('chat-status').textContent = 'Error: ' + error.message;
+        toast(error.message, true);
+      } finally {
+        button.disabled = false;
+      }
     }
     function renderAgents(sessions) {
       state.sessions = sessions || [];
@@ -715,6 +803,12 @@ export function renderUi(): string {
         load();
       } catch (e) { toast(e.message, true); }
     }
+    $('chat-input').addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        sendChat();
+      }
+    });
     init();
   </script>
 </body>

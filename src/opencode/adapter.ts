@@ -70,12 +70,22 @@ export interface PromptReceipt {
 
 export type TranscriptRole = 'user' | 'assistant' | 'system' | 'other'
 
+export interface TranscriptUsage {
+  readonly input: number
+  readonly output: number
+  readonly reasoning: number
+  readonly cacheRead: number
+  readonly cacheWrite: number
+}
+
 export interface TranscriptMessage {
   readonly id: string
   readonly role: TranscriptRole
   readonly text: string
   readonly agent?: string
   readonly createdAt?: string
+  readonly tokens?: TranscriptUsage
+  readonly costUsd?: number
 }
 
 /**

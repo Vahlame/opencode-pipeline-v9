@@ -172,12 +172,18 @@ Operacion adicional:
 npx tsx src/cli.ts outbox:dispatch --project <id> --transport file --target .runtime/outbox.ndjson --token $HUMAN
 npx tsx src/cli.ts delivery:verify --delivery <id> --token $HUMAN
 npx tsx src/cli.ts usage:record --project <id> --provider opencode-go --input <n> --output <n> --cost <usd> --token $HUMAN
+npx tsx src/cli.ts usage:sync --project <id> --token $HUMAN
 npx tsx src/cli.ts usage:breakdown --project <id> --by agent --token $HUMAN
 npx tsx src/cli.ts usage:breakdown --project <id> --by task --token $HUMAN
 npx tsx src/cli.ts usage:breakdown --project <id> --by purpose --token $HUMAN
 npx tsx src/cli.ts math:run --project <id> --script research/math/check.py --token $HUMAN
 npx tsx src/cli.ts legacy:reconcile --task <id> --decision cancel --confirm --token $HUMAN
 ```
+
+`usage:sync` lee los mensajes de OpenCode y registra tokens y coste exactos por
+mensaje. Cada sesion del orquestador queda ligada a agente, tarea y proposito.
+`in` incluye cache read/write; `out` incluye reasoning. Si OpenCode no reporta
+tokens, se conserva la estimacion local.
 
 ## Recuperacion y recursos
 
@@ -239,7 +245,7 @@ y reglas ordenadas. No se usan campos V1 como `permission`, `bash` o `maxSteps`.
 ## Resultado de la Fase 6
 
 ```text
-npm run check       -> 100 pruebas pasan, 2 omitidas
+npm run check       -> 103 pruebas pasan, 2 omitidas
 npm run build       -> pasa
 npm run db:migrate  -> esquema 8
 npm run test:real   -> 1 prueba real pasa

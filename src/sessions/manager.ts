@@ -12,6 +12,8 @@ import type { SessionRecord, SqliteStore, WorktreeRecord } from '../persistence/
 import type { ResourceGovernor } from '../resources/governor.js'
 
 export class SessionManager {
+  private readonly pendingInputEstimates = new Map<string, number>()
+
   constructor(
     private readonly store: SqliteStore,
     private readonly adapter: OpenCodeAdapter,
@@ -113,7 +115,15 @@ export class SessionManager {
   async prompt(record: SessionRecord, text: string): Promise<void> {
     if (!record.opencodeSessionId)
       throw new Error(`Session ${record.id} has no OpenCode session id`)
-    this.recordUsage(record, this.resources?.estimateTokens(text) ?? 0, 0)
+    const inputTokens = this.resources?.estimateTokens(text) ?? 0
+    if (this.adapter.runtime === 'mock') {
+      this.recordUsage(record, inputTokens, 0)
+    } else if (inputTokens > 0) {
+      this.pendingInputEstimates.set(
+        record.id,
+        (this.pendingInputEstimates.get(record.id) ?? 0) + inputTokens,
+      )
+    }
     await this.adapter.prompt({
       sessionID: record.opencodeSessionId,
       text,
@@ -136,12 +146,22 @@ export class SessionManager {
       throw new Error(`OpenCode session ${record.opencodeSessionId} failed during execution`)
     }
     const transcript = await this.adapter.getTranscript(record.opencodeSessionId)
-    const output = transcript
-      .filter((message) => message.role === 'assistant')
-      .map((message) => message.text)
-      .join('\n')
-    if (output.length > 0) {
-      this.recordUsage(record, 0, this.resources?.estimateTokens(output) ?? 0)
+    const hasExactUsage = transcript.some(
+      (message) => message.role === 'assistant' && message.tokens !== undefined,
+    )
+    if (hasExactUsage) {
+      this.pendingInputEstimates.delete(record.id)
+      this.recordExactUsage(record, transcript)
+    } else {
+      const output = transcript
+        .filter((message) => message.role === 'assistant')
+        .map((message) => message.text)
+        .join('\n')
+      const pendingInput = this.pendingInputEstimates.get(record.id) ?? 0
+      this.pendingInputEstimates.delete(record.id)
+      if (pendingInput > 0 || output.length > 0) {
+        this.recordUsage(record, pendingInput, this.resources?.estimateTokens(output) ?? 0)
+      }
     }
     this.store.transaction(() => {
       this.store.updateSessionStatus(record.id, 'IDLE')
@@ -150,6 +170,29 @@ export class SessionManager {
       })
     })
     return transcript
+  }
+
+  /**
+   * Importa el uso exacto que OpenCode ya registró para todos los mensajes del
+   * asistente. Es idempotente por `message.id` y no inventa cifras.
+   */
+  async syncUsage(
+    record: SessionRecord,
+  ): Promise<{ exactMessages: number; recorded: number; purpose: string }> {
+    if (!record.opencodeSessionId) {
+      return { exactMessages: 0, recorded: 0, purpose: record.purpose ?? 'session' }
+    }
+    const view = await this.adapter.getSession(record.opencodeSessionId)
+    const inferred = inferSessionContext(view?.title)
+    const transcript = await this.adapter.getTranscript(record.opencodeSessionId)
+    const exactMessages = transcript.filter(
+      (message) => message.role === 'assistant' && message.tokens !== undefined,
+    ).length
+    return {
+      exactMessages,
+      recorded: this.recordExactUsage(record, transcript, inferred),
+      purpose: inferred.purpose ?? record.purpose ?? 'session',
+    }
   }
 
   async interrupt(record: SessionRecord): Promise<void> {
@@ -219,6 +262,37 @@ export class SessionManager {
       )
     })
     return { delivered: messages.length, deferred: 0 }
+  }
+
+  private recordExactUsage(
+    record: SessionRecord,
+    transcript: readonly TranscriptMessage[],
+    context?: { readonly purpose?: string; readonly taskId?: TaskId },
+  ): number {
+    let recorded = 0
+    for (const message of transcript) {
+      if (message.role !== 'assistant' || !message.tokens) continue
+      if (this.store.findUsageEventByRequest(record.id, message.id)) continue
+      const inputTokens =
+        message.tokens.input + message.tokens.cacheRead + message.tokens.cacheWrite
+      const outputTokens = message.tokens.output + message.tokens.reasoning
+      const taskId = context?.taskId ?? record.taskId
+      this.resources?.recordUsage(record.projectId, inputTokens, outputTokens)
+      this.store.createUsageEvent({
+        projectId: record.projectId,
+        agentId: record.agentId,
+        ...(taskId ? { taskId } : {}),
+        sessionId: record.id,
+        purpose: context?.purpose ?? record.purpose ?? 'session',
+        source: 'provider',
+        inputTokens,
+        outputTokens,
+        costUsd: message.costUsd ?? 0,
+        requestId: message.id,
+      })
+      recorded++
+    }
+    return recorded
   }
 
   private recordUsage(record: SessionRecord, inputTokens: number, outputTokens: number): void {
@@ -300,4 +374,23 @@ export class SessionManager {
     })
     return event
   }
+}
+
+/**
+ * Sesiones antiguas se crearon antes de guardar proposito y tarea. El titulo
+ * que el orquestador les dio es estable y permite recuperar ese contexto sin
+ * tocar el estado de la tarea ni inventar datos.
+ */
+function inferSessionContext(title?: string): {
+  readonly purpose?: string
+  readonly taskId?: TaskId
+} {
+  if (!title) return {}
+  const task = /^Task (tsk_[A-Za-z0-9]+)/.exec(title)
+  if (task) return { purpose: 'task', taskId: task[1] as TaskId }
+  const jury = /^Jury ([A-Z_]+)/.exec(title)
+  if (jury) return { purpose: `judge:${jury[1]}` }
+  if (title.startsWith('Feedback global')) return { purpose: 'feedback' }
+  if (title.startsWith('Adapter proposal')) return { purpose: 'adapter-author' }
+  return {}
 }

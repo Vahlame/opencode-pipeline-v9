@@ -10,10 +10,11 @@ import { WorktreeMaintenance } from '../recovery/maintenance.js'
 import type { MaintenanceResult } from '../recovery/maintenance.js'
 import { DeliveryService } from '../integration/feedback.js'
 import { detectHardware, runMathScript } from '../math/runner.js'
+import { SessionManager } from '../sessions/manager.js'
 import { OutboxDispatcher, FileOutboxHandler, WebhookOutboxHandler } from '../outbox/index.js'
 import { verifyArtifact } from '../security/signatures.js'
 import type { Principal } from '../auth/types.js'
-import type { ProjectId, TaskId } from '../domain/ids.js'
+import type { AgentId, ProjectId, TaskId } from '../domain/ids.js'
 import { OrchestratorError } from '../orchestrator/errors.js'
 
 type CliOptions = Record<string, string | boolean | number | undefined>
@@ -425,14 +426,81 @@ export function registerPhase6Commands(program: Command): void {
         const rows = context.store.usageBreakdown(projectId, by)
         if (options.json === true) print({ by, rows })
         else {
+          const sessions =
+            by === 'session'
+              ? new Map(
+                  context.store.listSessions(projectId).map((session) => [session.id, session]),
+                )
+              : undefined
           process.stdout.write(`Uso por ${by}:\n`)
           for (const row of rows) {
+            let label = row.key
+            if (by === 'agent') {
+              const agent = context.store.getAgent(row.key as AgentId)
+              if (agent) label = `${agent.opencodeAgentId} (${agent.name})`
+            } else if (by === 'task') {
+              const task = context.store.getTask(row.key as TaskId)
+              if (task) label = `${task.title} [${task.state} ${task.id.slice(0, 12)}]`
+            } else if (by === 'session') {
+              const session = sessions?.get(row.key)
+              if (session) {
+                label = `${session.purpose ?? 'session'} [${session.id.slice(0, 12)}]${session.taskId ? ` [${session.taskId.slice(0, 12)}]` : ''}`
+              }
+            }
             process.stdout.write(
-              `  ${row.key} [${row.source}] in=${row.inputTokens} out=${row.outputTokens} coste=${row.costUsd} USD cambios=${row.entries}\n`,
+              `  ${label} [${row.source}] in=${row.inputTokens} out=${row.outputTokens} coste=${row.costUsd} USD cambios=${row.entries}\n`,
             )
           }
           if (rows.length === 0) process.stdout.write('  Sin datos de uso.\n')
         }
+      } finally {
+        context.close()
+      }
+    })
+
+  addProject(addToken(program.command('usage:sync')))
+    .description('Importa usage exacto de OpenCode para las sesiones registradas')
+    .option('--session <id>', 'limitar a una sesion interna')
+    .option('--json', 'salida JSON')
+    .action(async (options: CliOptions) => {
+      const context = createAppContext()
+      try {
+        const projectId = getString(options, 'project') as ProjectId
+        context.authz.require(principal(context, options), 'usage.sync', {
+          type: 'project',
+          id: projectId,
+        })
+        await withAdapter(context, async (adapter) => {
+          const manager = new SessionManager(context.store, adapter, context.resources)
+          const only = getLocal(options, 'session')
+          const sessions = context.store
+            .listSessions(projectId)
+            .filter((session) => !only || session.id === only)
+          const results: Array<{
+            sessionId: string
+            purpose: string
+            exactMessages: number
+            recorded: number
+          }> = []
+          for (const session of sessions) {
+            const synced = await manager.syncUsage(session)
+            results.push({
+              sessionId: session.id,
+              ...synced,
+            })
+          }
+          if (options.json === true) print({ projectId, results })
+          else {
+            const recorded = results.reduce((sum, row) => sum + row.recorded, 0)
+            process.stdout.write(`Uso exacto importado: ${recorded} mensajes nuevos\n`)
+            for (const row of results) {
+              if (row.exactMessages === 0) continue
+              process.stdout.write(
+                `  ${row.sessionId} [${row.purpose}] mensajes_con_uso=${row.exactMessages} nuevos=${row.recorded}\n`,
+              )
+            }
+          }
+        })
       } finally {
         context.close()
       }

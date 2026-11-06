@@ -94,8 +94,8 @@ plan, manifiesto, commits, aprobaciones, pruebas y evidencia.
 - `src/operations/`: diario idempotente con clave unica, lease y resultado.
 - `src/resources/`: estimacion de tokens/coste, limites y pausa del proyecto.
 - `src/recovery/maintenance.ts`: limpieza segura de worktrees/snapshots limpios.
-- CLI `status`, `usage`, `diagnostics`, `recovery:*`, `maintenance:cleanup` y
-  `delivery:export`.
+- CLI `status`, `usage`, `usage:sync`, `usage:breakdown`, `diagnostics`,
+  `recovery:*`, `maintenance:cleanup` y `delivery:export`.
 - `serve` ejecuta recuperacion al arrancar para proyectos no terminales.
 
 La recuperacion nunca interpreta un intento como exito. Un worktree sucio no se

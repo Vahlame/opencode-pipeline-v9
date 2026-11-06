@@ -3016,6 +3016,16 @@ export class SqliteStore {
     }
   }
 
+  findUsageEventByRequest(sessionId: string, requestId: string): UsageEventRecord | null {
+    const row = this.db.get<DbRow>(
+      `SELECT * FROM usage_events
+       WHERE session_id = ? AND request_id = ? AND source = 'provider'
+       LIMIT 1`,
+      [sessionId, requestId],
+    )
+    return row ? toUsageEvent(row) : null
+  }
+
   createUsageEvent(record: {
     readonly projectId: ProjectId
     readonly agentId?: AgentId

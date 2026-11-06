@@ -16,6 +16,7 @@ import type {
   TranscriptMessage,
 } from './adapter.js'
 import { OpenCodeAdapterError, SessionTimeoutError } from './errors.js'
+import { toTranscriptMessage } from './transcript.js'
 
 export interface SdkAdapterOptions {
   readonly dataDir?: string
@@ -63,42 +64,6 @@ function toAgentSummary(info: AgentInfo): AgentSummary {
     ...(info.description ? { description: info.description } : {}),
     mode: info.mode,
     ...(info.model ? { model: toModelReference(info.model) } : {}),
-  }
-}
-
-function toTranscriptMessage(message: SessionMessageInfo): TranscriptMessage | null {
-  switch (message.type) {
-    case 'assistant': {
-      const text = message.content
-        .filter((content) => content.type === 'text')
-        .map((content) => content.text)
-        .join('\n')
-        .trim()
-      return {
-        id: message.id,
-        role: 'assistant',
-        text,
-        agent: message.agent,
-        createdAt: new Date(message.time.created).toISOString(),
-      }
-    }
-    case 'user':
-      return {
-        id: message.id,
-        role: 'user',
-        text: message.text,
-        createdAt: new Date(message.time.created).toISOString(),
-      }
-    case 'system':
-    case 'synthetic':
-      return {
-        id: message.id,
-        role: 'system',
-        text: message.text,
-        createdAt: new Date(message.time.created).toISOString(),
-      }
-    default:
-      return null
   }
 }
 

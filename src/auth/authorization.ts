@@ -90,6 +90,7 @@ export type Action =
   | 'legacy.reconcile'
   | 'resource.record'
   | 'task.rename'
+  | 'usage.sync'
 
 export type ResourceType =
   | 'project'
@@ -213,6 +214,7 @@ const HUMAN_ACTIONS = new Set<Action>([
   'legacy.reconcile',
   'resource.record',
   'task.rename',
+  'usage.sync',
   'temporary_permission.grant',
 ])
 
@@ -309,6 +311,7 @@ export class AuthorizationService {
       action !== 'legacy.reconcile' &&
       action !== 'resource.record' &&
       action !== 'task.rename' &&
+      action !== 'usage.sync' &&
       ['COMPLETED', 'FAILED', 'CANCELLED'].includes(projectState.status)
     ) {
       return this.record(

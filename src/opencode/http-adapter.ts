@@ -1,6 +1,6 @@
 import { OpenCode } from '@opencode/client'
 import { Service } from '@opencode/client/service'
-import type { AgentInfo, SessionInfo, SessionMessageInfo } from '@opencode/client'
+import type { AgentInfo, SessionInfo } from '@opencode/client'
 import type {
   AdapterHealth,
   AgentSummary,
@@ -14,6 +14,7 @@ import type {
   TranscriptMessage,
 } from './adapter.js'
 import { OpenCodeAdapterError, ServiceUnavailableError, SessionTimeoutError } from './errors.js'
+import { toTranscriptMessage } from './transcript.js'
 
 export interface HttpAdapterOptions {
   readonly baseUrl?: string
@@ -66,48 +67,6 @@ function isNotFound(error: unknown): boolean {
     candidate.status === 404 ||
     candidate.message?.toLowerCase().includes('not found') === true
   )
-}
-
-function toTranscriptMessage(message: SessionMessageInfo): TranscriptMessage | null {
-  switch (message.type) {
-    case 'assistant': {
-      const text = message.content
-        .filter((content) => content.type === 'text')
-        .map((content) => content.text)
-        .join('\n')
-        .trim()
-      return {
-        id: message.id,
-        role: 'assistant',
-        text,
-        agent: message.agent,
-        createdAt: new Date(message.time.created).toISOString(),
-      }
-    }
-    case 'user':
-      return {
-        id: message.id,
-        role: 'user',
-        text: message.text,
-        createdAt: new Date(message.time.created).toISOString(),
-      }
-    case 'system':
-      return {
-        id: message.id,
-        role: 'system',
-        text: message.text,
-        createdAt: new Date(message.time.created).toISOString(),
-      }
-    case 'synthetic':
-      return {
-        id: message.id,
-        role: 'system',
-        text: message.text,
-        createdAt: new Date(message.time.created).toISOString(),
-      }
-    default:
-      return null
-  }
 }
 
 /**

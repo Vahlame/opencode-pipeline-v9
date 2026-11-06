@@ -305,7 +305,10 @@ El agente `matematico` puede usar `orchestrator_math_run` a traves del plugin.
 - `outbox:dispatch --transport file` entrego **116 eventos** a
   `.runtime/outbox.ndjson`; la outbox quedo en 0 pendientes.
 - `usage:record` importa uso exacto del proveedor (tokens, coste y request ID).
-  La estimacion local sigue existiendo para cuando el proveedor no entrega datos.
+  La estimacion local sigue existiendo para cuando OpenCode no entrega datos.
+- `usage:sync` lee los mensajes de OpenCode y registra tokens/coste exactos por
+  mensaje. Es idempotente y recupera proposito/tarea en sesiones antiguas desde
+  el titulo. `in` incluye cache read/write; `out` incluye reasoning.
 - `usage_events` registra uso por agente, tarea, sesion y proposito.
   `usage:breakdown --by agent|task|session|purpose` muestra el desglose.
 - `math:run` ejecuta scripts con Python o Node detectando hardware.
@@ -426,7 +429,7 @@ npx tsx src/cli.ts maintenance:cleanup --project <project-id> --keep-days 7 --to
 ## Verificacion final
 
 ```text
-npm run check       -> 100 pruebas pasan, 2 omitidas
+npm run check       -> 103 pruebas pasan, 2 omitidas
 npm run build       -> pasa
 npm run db:migrate  -> esquema 8
 npm run test:real   -> 1 prueba real pasa
